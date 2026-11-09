@@ -1,0 +1,13 @@
+# Dependencies
+node_modules/
+
+# Build output
+client/dist/
+server/dist/
+
+# Environment — never commit real keys
+.env
+.env.local
+
+# OS / editor
+.DS_Store

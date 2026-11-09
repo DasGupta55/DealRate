@@ -1,0 +1,26 @@
+[build]
+  command = "npm run build"
+  publish = "client/dist"
+  functions = "netlify/functions"
+
+# API routes first: /api/* proxies to the single Netlify function.
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+  force = true
+
+# SPA fallback: everything else serves the client app.
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+# NOTE: no Content-Security-Policy and no X-Frame-Options are set here —
+# either could break the Razorpay checkout.js popup.

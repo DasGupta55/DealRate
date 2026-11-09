@@ -1,0 +1,1 @@
+{"name":"@dealrate/client","private":true,"scripts":{"build":"vite build","dev":"vite","preview":"vite preview","typecheck":"tsc --noEmit -p tsconfig.json"},"type":"module","version":"1.0.0"}

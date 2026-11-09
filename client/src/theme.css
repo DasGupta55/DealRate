@@ -1,0 +1,613 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto:wght@500&family=Saira:wght@600;700;800&family=Space+Grotesk:wght@500;600;700&family=Pinyon+Script&display=swap');
+@import "tailwindcss";
+@import "tailwindcss-safe-area";
+
+/* Self-hosted latin subsets (SIL OFL) for the two intro typefaces, so
+   the Saira headlines and the signature accents render correctly even
+   when the Google Fonts CDN is unreachable. The Google import above
+   still supplies the full families and the UI fonts when it loads. */
+@font-face {
+  font-family: "Saira";
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url("./assets/fonts/saira-700-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Saira";
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url("./assets/fonts/saira-800-latin.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Pinyon Script";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("./assets/fonts/pinyon-script-latin.woff2") format("woff2");
+}
+
+@theme {
+  --text-xs: 12px;
+  --text-xs--line-height: 16px;
+  --text-sm: 14px;
+  --text-sm--line-height: 20px;
+  --text-base: 16px;
+  --text-base--line-height: 24px;
+  --text-lg: 18px;
+  --text-lg--line-height: 28px;
+  --text-xl: 20px;
+  --text-xl--line-height: 28px;
+  --text-2xl: 24px;
+  --text-2xl--line-height: 32px;
+  --text-3xl: 30px;
+  --text-3xl--line-height: 36px;
+  --text-4xl: 36px;
+  --text-4xl--line-height: 40px;
+  --text-5xl: 48px;
+  --text-5xl--line-height: 52px;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: "Space Grotesk", "Inter", ui-sans-serif, system-ui, sans-serif;
+  /* Primary page headlines: Saira (SIL OFL, commercial use OK). */
+  --font-headline: "Saira", "Inter", ui-sans-serif, system-ui, sans-serif;
+  /* Handwritten accents: the family name is "Adelia" so a licensed
+     Adelia file dropped in later wins automatically. Adelia itself is
+     personal-use only (commercial licence sold separately), so no
+     Adelia file is embedded; the rendered stand-in is Pinyon Script
+     (SIL OFL), the elegant signature hand already shipped with the app. */
+  --font-hand: "Adelia", "Pinyon Script", "Snell Roundhand", "Segoe Script", cursive;
+}
+
+:root {
+  /* Dark fintech theme (Revolut / Cash App direction) — dark only. */
+  color-scheme: dark;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --bg: #0a0a0f;
+  --surface: #14141b;
+  --surface-alt: #1d1d27;
+  --text: #f5f5f7;
+  --dim: #9a9aa8;
+  --border: #23232d;
+  --accent: #c8ff3d;
+  --accent-ink: #0a0a0f;
+  --violet: #7c5cff;
+  --amber: #e8b33c;
+  --danger: #ff7a6b;
+  --radius: 24px;
+  --space-surface: var(--surface);
+  --space-surface-alt: var(--surface-alt);
+  --space-muted: var(--dim);
+  --space-border: var(--border);
+  --space-accent: var(--accent);
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg);
+}
+
+.font-display {
+  font-family: var(--font-display);
+}
+
+/* ---- Five-page intro system: signature accent as the headline ----
+   One visual language on every page (Price, Brands, Deals, Invoices,
+   Plan): the handwritten accent (Adelia family, lime) is the
+   page's main headline — it writes itself on with a clip reveal and
+   pops forward off the surface on layered soft shadows, a hand-drawn
+   marker underline draws in behind it, the description rises in, and
+   one small floating object per page emerges last and settles. Only
+   transform / clip / opacity animate; reduced motion gets the final
+   static composition. */
+
+.font-headline {
+  font-family: var(--font-headline);
+}
+
+.page-intro {
+  position: relative;
+}
+
+@keyframes bpt-intro-rise {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.intro-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* The wrap is the heading element itself (h1/h2), so reset the UA
+   heading defaults and let a long accent wrap inside the row instead
+   of pushing the floating object off-screen. */
+.intro-accent-wrap {
+  position: relative;
+  width: fit-content;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  font-size: inherit;
+  font-weight: inherit;
+  perspective: 700px;
+}
+
+.intro-accent {
+  display: inline-block;
+  font-family: var(--font-hand);
+  font-weight: 400;
+  font-size: clamp(2.35rem, 11vw, 3.9rem);
+  line-height: 1.3;
+  padding: 0.04em 0.18em 0.16em 0.04em;
+  color: var(--accent);
+  transform-origin: 16% 72%;
+  /* Raised-letter depth: contact shadow, two soft cast shadows and a
+     whisper of lime ambience — dimensional, never neon. */
+  text-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.4),
+    0 2px 3px rgba(0, 0, 0, 0.35),
+    0 7px 14px rgba(0, 0, 0, 0.45),
+    0 18px 34px rgba(0, 0, 0, 0.5),
+    0 0 22px rgba(200, 255, 61, 0.12);
+  animation: bpt-accent-write 0.95s cubic-bezier(0.6, 0, 0.2, 1) 0.45s both;
+}
+
+@keyframes bpt-accent-write {
+  0% {
+    clip-path: inset(-25% 103% -32% -5%);
+    transform: perspective(700px) rotateX(16deg) rotate(-3.5deg) scale(0.94);
+  }
+  55% {
+    clip-path: inset(-25% 38% -32% -5%);
+    transform: perspective(700px) rotateX(9deg) rotate(-2.6deg) scale(0.985);
+  }
+  78% {
+    clip-path: inset(-25% -6% -32% -5%);
+    transform: perspective(700px) rotateX(3deg) rotate(-1.8deg) scale(1.04);
+  }
+  100% {
+    clip-path: inset(-25% -6% -32% -5%);
+    transform: perspective(700px) rotateX(5deg) rotate(-2deg) scale(1);
+  }
+}
+
+.intro-desc {
+  margin-top: 0.65rem;
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--dim);
+  max-width: 34rem;
+  animation: bpt-intro-rise 0.55s var(--ease-out) 0.15s both;
+}
+
+/* Hand-drawn marker underline: an uneven double pass (a wide faint
+   stroke under a firmer one) that draws itself behind the accent. */
+.intro-underline {
+  position: absolute;
+  left: 3%;
+  bottom: 0.04em;
+  width: 94%;
+  height: 0.18em;
+  overflow: visible;
+  pointer-events: none;
+}
+
+.intro-underline path {
+  fill: none;
+  stroke: var(--accent);
+  stroke-linecap: round;
+  stroke-dasharray: 100;
+  stroke-dashoffset: 100;
+  animation: bpt-underline-draw 0.5s cubic-bezier(0.4, 0, 0.2, 1) 1.3s both;
+}
+
+.intro-underline .u-main {
+  stroke-width: 5.5;
+  opacity: 0.92;
+}
+
+.intro-underline .u-soft {
+  stroke-width: 10;
+  opacity: 0.16;
+  animation-delay: 1.36s;
+}
+
+@keyframes bpt-underline-draw {
+  to { stroke-dashoffset: 0; }
+}
+
+/* ---- Floating intro objects (one per page) ----
+   Each object emerges forward after the accent (scale + rise + a
+   soft cast shadow), then breathes almost imperceptibly. Pure CSS
+   shapes and inline SVG — no image assets. */
+.intro-obj {
+  flex: none;
+  pointer-events: none;
+  animation: bpt-obj-in 0.55s var(--ease-out) 0.95s both;
+}
+
+@keyframes bpt-obj-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.92); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.intro-obj-float {
+  animation: bpt-obj-float 3.8s ease-in-out 1.8s infinite alternate;
+}
+
+@keyframes bpt-obj-float {
+  from { transform: translateY(0) rotate(0.4deg); }
+  to { transform: translateY(-3px) rotate(-0.4deg); }
+}
+
+/* Price: a lime price tag with a punched hole. */
+.obj-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px 7px 17px;
+  background: linear-gradient(155deg, #dcff70, var(--accent) 55%, #a8d62e);
+  clip-path: polygon(12px 0, 100% 0, 100% 100%, 12px 100%, 0 50%);
+  transform: rotate(-8deg);
+  filter: drop-shadow(0 10px 16px rgba(0, 0, 0, 0.5));
+  font-family: var(--font-headline);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--accent-ink);
+  white-space: nowrap;
+}
+
+.obj-tag-hole {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  margin-left: -7px;
+  border-radius: 9999px;
+  border: 1.5px solid rgba(10, 10, 15, 0.55);
+  background: var(--bg);
+}
+
+/* Miniature floating cards shared by the Brands / Deals / Plan /
+   Account objects: glass depth, top highlight, soft cast shadow. */
+.obj-card {
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  background: linear-gradient(160deg, rgba(38, 38, 50, 0.92), rgba(20, 20, 27, 0.94));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1), 0 16px 30px rgba(0, 0, 0, 0.5);
+}
+
+.obj-line {
+  height: 5px;
+  border-radius: 9999px;
+  background: rgba(245, 245, 247, 0.22);
+}
+
+.obj-line-lime {
+  background: rgba(200, 255, 61, 0.75);
+}
+
+/* Deals: the flowing lime path drifts slowly to suggest progress. */
+.obj-pipe-path {
+  stroke-dasharray: 5 6;
+  animation: bpt-pipe-flow 2.6s linear infinite;
+}
+
+@keyframes bpt-pipe-flow {
+  to { stroke-dashoffset: -22; }
+}
+
+/* Invoices: the SENT / PAID stamp lands once, like a real stamp. */
+.obj-stamp {
+  display: inline-block;
+  padding: 2px 8px;
+  border: 2px solid #3fae5a;
+  border-radius: 6px;
+  color: #4cc96e;
+  font-family: var(--font-headline);
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  transform: rotate(-11deg);
+  opacity: 0.92;
+  animation: bpt-stamp-in 0.35s var(--ease-out) 1.35s both;
+}
+
+@keyframes bpt-stamp-in {
+  from { opacity: 0; transform: rotate(-11deg) scale(1.5); }
+  to { opacity: 0.92; transform: rotate(-11deg) scale(1); }
+}
+
+/* Plan: metallic sheen across the membership card. */
+.obj-member {
+  background:
+    linear-gradient(115deg, rgba(255, 255, 255, 0.14) 0%, rgba(255, 255, 255, 0) 42%),
+    linear-gradient(150deg, #241d3f, #17141f 60%, #14141b);
+  border-color: rgba(124, 92, 255, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), 0 18px 36px rgba(0, 0, 0, 0.55), 0 10px 30px -8px rgba(124, 92, 255, 0.4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .intro-desc,
+  .intro-obj {
+    animation: none;
+  }
+  .intro-accent {
+    animation: none;
+    transform: perspective(700px) rotateX(5deg) rotate(-2deg);
+  }
+  .intro-underline path {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+  .intro-obj-float,
+  .obj-pipe-path {
+    animation: none;
+  }
+  .obj-stamp {
+    animation: none;
+    opacity: 0.92;
+  }
+}
+
+/* Card: solid #14141B, 24px radius, 1px border with a faint top
+   highlight, soft shadow. */
+.card {
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 14px 34px rgba(0, 0, 0, 0.38);
+}
+
+/* Pro card: violet edge + soft glow. */
+.pro-card {
+  border-radius: var(--radius);
+  border: 1px solid rgba(124, 92, 255, 0.55);
+  background:
+    linear-gradient(#17141f, #14141b) padding-box,
+    linear-gradient(160deg, rgba(124, 92, 255, 0.65), rgba(124, 92, 255, 0.12) 60%) border-box;
+  box-shadow: 0 0 0 1px rgba(124, 92, 255, 0.25), 0 18px 48px -10px rgba(124, 92, 255, 0.45);
+}
+
+/* Frosted glass — used ONLY on the bottom nav, the sign-in sheet
+   and the lock overlays: blur 20px at 70% opacity. */
+.glass-card {
+  background: rgba(20, 20, 27, 0.7);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+}
+
+/* Sign-in bottom sheet material: frosted glass, blur 20px, dark tint. */
+.sheet-glass {
+  background: rgba(16, 16, 22, 0.82);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: none;
+}
+
+/* One soft shimmer sweep when the sign-in sheet opens — runs once. */
+@keyframes bpt-sheet-shimmer {
+  from { transform: translateX(-130%) skewX(-12deg); }
+  to { transform: translateX(240%) skewX(-12deg); }
+}
+.sheet-shimmer {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.sheet-shimmer::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 45%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.07), transparent);
+  animation: bpt-sheet-shimmer 0.9s var(--ease-out) 0.08s both;
+}
+
+/* Google-branded sign-in button — colours are Google's, never themed. */
+.google-btn {
+  font-family: "Roboto", "Inter", sans-serif;
+  font-weight: 500;
+  background: #ffffff;
+  color: #1f1f1f;
+  border: 1px solid #747775;
+}
+
+input, select, textarea {
+  font-size: 16px;
+}
+
+/* ---- Working animations (fetch, brand search, first load) ---- */
+
+@keyframes bpt-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes bpt-progress-slide {
+  0% { transform: translateX(-110%); }
+  100% { transform: translateX(320%); }
+}
+
+@keyframes bpt-shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+@keyframes bpt-step-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes bpt-dot-pulse {
+  0%, 80%, 100% { opacity: 0.25; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1); }
+}
+
+.anim-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  flex: none;
+  border-radius: 9999px;
+  border: 2px solid currentColor;
+  border-top-color: transparent;
+  animation: bpt-spin 0.7s linear infinite;
+  vertical-align: -3px;
+}
+
+.anim-spinner-lg {
+  width: 26px;
+  height: 26px;
+  border-width: 3px;
+}
+
+.anim-progress-track {
+  position: relative;
+  overflow: hidden;
+  height: 6px;
+  border-radius: 9999px;
+  background: var(--surface-alt);
+}
+
+.anim-progress-fill {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 32%;
+  border-radius: 9999px;
+  background: var(--accent);
+  animation: bpt-progress-slide 1.4s ease-in-out infinite;
+}
+
+.anim-shimmer {
+  background: linear-gradient(
+    90deg,
+    var(--surface-alt) 25%,
+    #262633 50%,
+    var(--surface-alt) 75%
+  );
+  background-size: 800px 100%;
+  animation: bpt-shimmer 1.3s linear infinite;
+}
+
+.anim-step-in {
+  animation: bpt-step-in 0.35s ease both;
+}
+
+.anim-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 9999px;
+  background: var(--accent);
+  animation: bpt-dot-pulse 1.2s ease-in-out infinite;
+}
+.anim-dot:nth-child(2) { animation-delay: 0.15s; }
+.anim-dot:nth-child(3) { animation-delay: 0.3s; }
+
+@media (prefers-reduced-motion: reduce) {
+  .anim-spinner,
+  .anim-progress-fill,
+  .anim-shimmer,
+  .anim-step-in,
+  .anim-dot {
+    animation: none;
+  }
+  .anim-progress-fill {
+    width: 100%;
+    opacity: 0.5;
+  }
+}
+
+/* ---- Press feedback & polish ----
+   Buttons answer on pointer-down (scale 0.97, 200ms ease-out).
+   Numbers use tabular figures so animated prices never jitter.
+   The bottom nav is a translucent dark material. */
+
+.btn-press {
+  transition: transform 200ms var(--ease-out), opacity 200ms var(--ease-out),
+    background-color 200ms ease, border-color 200ms ease, color 200ms ease;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn-press:active {
+  transform: scale(0.97);
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+.glass-nav {
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+  backdrop-filter: blur(20px) saturate(150%);
+  -webkit-backdrop-filter: blur(20px) saturate(150%);
+}
+
+/* Subtle lime glow behind the hero price number. */
+.price-glow {
+  position: absolute;
+  left: -24px;
+  top: 50%;
+  width: 300px;
+  height: 150px;
+  transform: translateY(-50%);
+  background: radial-gradient(closest-side, rgba(200, 255, 61, 0.16), transparent);
+  pointer-events: none;
+}
+
+/* Subtle lime ambient light behind a page's hero area (Price and
+   Plan). Very low opacity, transform-free, capped to the container
+   width so it can never cause horizontal scroll. */
+.ambient-glow {
+  position: absolute;
+  top: -60px;
+  left: 50%;
+  width: min(560px, 100%);
+  height: 320px;
+  transform: translateX(-50%);
+  background: radial-gradient(closest-side, rgba(200, 255, 61, 0.08), transparent);
+  pointer-events: none;
+}
+
+.display-tight {
+  letter-spacing: -0.03em;
+  line-height: 1.04;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-press {
+    transition: opacity 200ms ease, background-color 200ms ease;
+  }
+  .btn-press:active {
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  .glass-nav,
+  .glass-card {
+    background: var(--surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
+
+@media (prefers-contrast: more) {
+  .glass-nav,
+  .glass-card {
+    background: var(--surface);
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+  }
+}
