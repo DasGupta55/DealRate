@@ -1,0 +1,26 @@
+# GitHub Actions secrets required (add under repo Settings -> Secrets and variables -> Actions):
+#   PUBLIC_URL   — the public base URL of the deployed site, e.g. https://dealrate.netlify.app
+#                  (no trailing slash). The workflow POSTs to $PUBLIC_URL/api/cron/overdue.
+#   CRON_SECRET  — the shared secret for the overdue-check endpoint. Must match the
+#                  CRON_SECRET env var set in the Netlify dashboard for the site.
+#                  Generate a long random value; never commit it here.
+name: Overdue invoice check
+
+on:
+  schedule:
+    # 03:43 UTC = 09:13 IST (IST is UTC+5:30 year-round, no daylight saving).
+    - cron: '43 3 * * *'
+  workflow_dispatch: {}
+
+jobs:
+  overdue-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run overdue invoice check
+        run: |
+          curl --fail-with-body --max-time 60 \
+            -X POST "$PUBLIC_URL/api/cron/overdue" \
+            -H "x-cron-secret: $CRON_SECRET"
+        env:
+          PUBLIC_URL: ${{ secrets.PUBLIC_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
