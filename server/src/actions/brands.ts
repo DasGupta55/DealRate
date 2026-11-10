@@ -11,6 +11,7 @@ import {
   type BrandRow,
 } from "../lib/db";
 import { userIdArg } from "./common";
+import { createDeal } from "./deals";
 
 export const discoverBrandsSchema = z.object({
   userId: userIdArg,
@@ -183,4 +184,61 @@ export async function deleteBrand(
     .eq("owner_id", args.userId);
   dbThrow(error, "deleteBrand");
   return { ok: true };
+}
+
+// One tap from Brand Finder to a deal in the pipeline: keeps the brand
+// on the saved-brands shortlist and creates the deal (or returns the
+// existing one when this brand is already in Deals). The client
+// navigates to the Deals tab on success.
+export const addBrandToDealsSchema = z.object({
+  userId: userIdArg,
+  accessToken: z.string().optional(),
+  brandId: z.number(),
+});
+
+export async function addBrandToDeals(
+  ctx: ActionCtx,
+  args: z.infer<typeof addBrandToDealsSchema>,
+): Promise<{ dealId: number; created: boolean }> {
+  const db = requireDb(ctx);
+  await requireVerifiedUser(ctx, args.userId, args.accessToken);
+  await requireProPlan(ctx, args.userId);
+  const { data: brandData, error: brandError } = await db
+    .from("brands")
+    .select("*")
+    .eq("id", args.brandId)
+    .eq("owner_id", args.userId)
+    .limit(1)
+    .maybeSingle();
+  dbThrow(brandError, "addBrandToDeals brand");
+  const brand = (brandData ?? null) as BrandRow | null;
+  if (!brand) throw new Error("Brand not found");
+  // Keep it on the saved-brands shortlist (no-op if already saved).
+  const { error: saveError } = await db
+    .from("brands")
+    .update({ is_suggestion: false })
+    .eq("id", args.brandId)
+    .eq("owner_id", args.userId);
+  dbThrow(saveError, "addBrandToDeals save brand");
+  // Default agreed price from the latest calculation, same as the old
+  // Start-a-deal button used.
+  const { data: calcData, error: calcError } = await db
+    .from("calculations")
+    .select("price_mid")
+    .eq("owner_id", args.userId)
+    .order("id", { ascending: false })
+    .limit(1);
+  dbThrow(calcError, "addBrandToDeals calculation");
+  const priceMid = ((calcData ?? []) as { price_mid: number | null }[])[0]
+    ?.price_mid ?? null;
+  const created = await createDeal(ctx, {
+    userId: args.userId,
+    accessToken: args.accessToken,
+    brandName: brand.name,
+    brandEmail: brand.contact_email ?? undefined,
+    deliverable: "dedicated",
+    agreedPrice: priceMid ?? undefined,
+    currency: "USD",
+  });
+  return { dealId: created.id, created: created.created };
 }

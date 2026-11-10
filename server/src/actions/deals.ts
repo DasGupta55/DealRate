@@ -43,10 +43,23 @@ export const createDealSchema = z.object({
 export async function createDeal(
   ctx: ActionCtx,
   args: z.infer<typeof createDealSchema>,
-): Promise<{ id: number }> {
+): Promise<{ id: number; created: boolean }> {
   const db = requireDb(ctx);
   await requireVerifiedUser(ctx, args.userId, args.accessToken);
   await requireProPlan(ctx, args.userId);
+  // One deal per brand: if this brand is already in the pipeline,
+  // return the existing deal instead of creating a duplicate (also
+  // covers double-taps before the dashboard refetches).
+  const norm = args.brandName.trim().toLowerCase();
+  const { data: existingData, error: existingError } = await db
+    .from("deals")
+    .select("id, brand_name")
+    .eq("owner_id", args.userId);
+  dbThrow(existingError, "createDeal existing");
+  const existing = ((existingData ?? []) as { id: number; brand_name: string }[]).find(
+    (d) => d.brand_name.trim().toLowerCase() === norm,
+  );
+  if (existing) return { id: existing.id, created: false };
   const { data, error } = await db
     .from("deals")
     .insert({
@@ -63,7 +76,7 @@ export async function createDeal(
     .single();
   dbThrow(error, "createDeal insert");
   if (!data) throw new Error("createDeal: insert returned no rows");
-  return { id: (data as { id: number }).id };
+  return { id: (data as { id: number }).id, created: true };
 }
 
 export const updateDealSchema = z.object({

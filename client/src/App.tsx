@@ -2433,11 +2433,21 @@ function BrandsTab({ data, userId, accessToken, invalidate, goDeals }: { data: D
     onError: () => toast.error("Could not add that brand. Try again."),
   });
   const dealMut = useMutation({
-    mutationFn: (b: Dash["brands"][number]) =>
-      api.createDeal({ userId, accessToken, brandName: b.name, brandEmail: b.contactEmail ?? undefined, deliverable: "dedicated", agreedPrice: data.calculations[0]?.priceMid, currency: "USD" }),
-    onSuccess: () => { invalidate(); toast.success("Deal started — it's in your pipeline"); goDeals(); },
-    onError: () => toast.error("Could not start that deal. Try again."),
+    mutationFn: (b: Dash["brands"][number]) => api.addBrandToDeals({ userId, accessToken, brandId: b.id }),
+    onSuccess: (r) => {
+      invalidate();
+      toast.success(r.created ? "Added to Deals — it's in your pipeline" : "Already in Deals — opening it");
+      goDeals();
+    },
+    onError: () => toast.error("Could not add that deal. Try again."),
   });
+
+  // A brand already has a deal when a pipeline deal matches its name.
+  const dealByBrand = new Map(
+    data.deals.map((d) => [d.brandName.trim().toLowerCase(), d]),
+  );
+  const dealFor = (brandName: string) =>
+    dealByBrand.get(brandName.trim().toLowerCase()) ?? null;
 
   const suggestions = data.brands.filter((b) => b.isSuggestion);
   const mine = data.brands.filter((b) => !b.isSuggestion);
@@ -2504,9 +2514,15 @@ function BrandsTab({ data, userId, accessToken, invalidate, goDeals }: { data: D
                   <a href={b.sourceUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block max-w-full truncate align-bottom text-sm font-medium text-[var(--accent)] underline">{b.sourceUrl}</a>
                 )}
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <button type="button" className={btnPrimary} onClick={() => api.addBrand({ userId, accessToken, id: b.id, name: b.name, niche: b.niche ?? undefined, notes: b.notes ?? undefined }).then(() => { invalidate(); toast.success("Brand kept — it's in your list"); })}>
-                    Keep this brand
-                  </button>
+                  {dealFor(b.name) ? (
+                    <button type="button" className={btnPrimary} onClick={() => goDeals()}>
+                      Open Deal
+                    </button>
+                  ) : (
+                    <button type="button" className={btnPrimary} disabled={dealMut.isPending} onClick={() => dealMut.mutate(b)}>
+                      {dealMut.isPending ? "Adding…" : "Add to Deals"}
+                    </button>
+                  )}
                   <button type="button" className={btnGhost} onClick={() => api.deleteBrand({ userId, accessToken, id: b.id }).then(invalidate)}>Dismiss</button>
                 </div>
               </motion.li>
@@ -2517,6 +2533,7 @@ function BrandsTab({ data, userId, accessToken, invalidate, goDeals }: { data: D
 
       <section aria-label="My brands">
         <SectionTitle>My brands</SectionTitle>
+        <p className="mt-1 text-sm text-[var(--dim)]">Your saved shortlist — add any of them to Deals when you are ready.</p>
         <form
           className="mt-3 grid grid-cols-1 gap-3 card p-4 sm:grid-cols-3"
           onSubmit={(e) => { e.preventDefault(); if (name.trim()) addMut.mutate(); }}
@@ -2545,7 +2562,11 @@ function BrandsTab({ data, userId, accessToken, invalidate, goDeals }: { data: D
                 <p className="text-sm text-[var(--dim)] [overflow-wrap:anywhere]">{[b.contactEmail, b.website, b.niche].filter(Boolean).join(" · ") || "No contact details yet"}</p>
               </div>
               <div className="flex flex-none gap-2">
-                <button type="button" className={btnPrimary} disabled={dealMut.isPending} onClick={() => dealMut.mutate(b)}>Start a deal</button>
+                {dealFor(b.name) ? (
+                  <button type="button" className={btnPrimary} onClick={() => goDeals()}>Open Deal</button>
+                ) : (
+                  <button type="button" className={btnPrimary} disabled={dealMut.isPending} onClick={() => dealMut.mutate(b)}>{dealMut.isPending ? "Adding…" : "Add to Deals"}</button>
+                )}
                 <button type="button" aria-label={`Remove ${b.name}`} className={btnGhost} onClick={() => api.deleteBrand({ userId, accessToken, id: b.id }).then(invalidate)}>Remove</button>
               </div>
             </motion.li>
@@ -2749,7 +2770,7 @@ function DealsTab({ data, userId, accessToken, invalidate, goInvoices }: { data:
   const [brandName, setBrandName] = useState("");
   const addMut = useMutation({
     mutationFn: () => api.createDeal({ userId, accessToken, brandName: brandName.trim(), deliverable: "dedicated", agreedPrice: data.calculations[0]?.priceMid, currency: "USD" }),
-    onSuccess: () => { setBrandName(""); invalidate(); toast.success("Deal added to your pipeline"); },
+    onSuccess: (r) => { setBrandName(""); invalidate(); toast.success(r.created ? "Deal added to your pipeline" : "That brand already has a deal in your pipeline"); },
     onError: () => toast.error("Could not add that deal. Try again."),
   });
   return (

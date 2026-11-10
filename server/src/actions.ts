@@ -36,6 +36,8 @@ import {
 import {
   addBrand,
   addBrandSchema,
+  addBrandToDeals,
+  addBrandToDealsSchema,
   deleteBrand,
   deleteBrandSchema,
   discoverBrands,
@@ -119,6 +121,7 @@ export const Actions: Record<string, ActionHandler> = {
   deleteCalculation: asHandler(deleteCalculation),
   discoverBrands: asHandler(discoverBrands),
   addBrand: asHandler(addBrand),
+  addBrandToDeals: asHandler(addBrandToDeals),
   deleteBrand: asHandler(deleteBrand),
   createDeal: asHandler(createDeal),
   updateDeal: asHandler(updateDeal),
@@ -158,6 +161,7 @@ export type ActionHandlers = {
   deleteCalculation: typeof deleteCalculation;
   discoverBrands: typeof discoverBrands;
   addBrand: typeof addBrand;
+  addBrandToDeals: typeof addBrandToDeals;
   deleteBrand: typeof deleteBrand;
   createDeal: typeof createDeal;
   updateDeal: typeof updateDeal;
@@ -192,6 +196,7 @@ export const ActionSchemas: Record<string, z.ZodTypeAny> = {
   deleteCalculation: deleteCalculationSchema,
   discoverBrands: discoverBrandsSchema,
   addBrand: addBrandSchema,
+  addBrandToDeals: addBrandToDealsSchema,
   deleteBrand: deleteBrandSchema,
   createDeal: createDealSchema,
   updateDeal: updateDealSchema,
