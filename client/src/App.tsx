@@ -1393,8 +1393,8 @@ export function App() {
     ...(data ?? FALLBACK_DASH),
     inrRate: data?.inrRate ?? OWNER_CONFIG.inrRate,
   };
-  const supabaseUrl = OWNER_CONFIG.supabaseUrl || displayData.supabaseUrl || null;
-  const supabaseAnonKey = OWNER_CONFIG.supabaseAnonKey || data?.supabaseAnonKey || null;
+  const supabaseUrl = OWNER_CONFIG.supabaseUrl || import.meta.env.VITE_SUPABASE_URL || displayData.supabaseUrl || null;
+  const supabaseAnonKey = OWNER_CONFIG.supabaseAnonKey || import.meta.env.VITE_SUPABASE_ANON_KEY || data?.supabaseAnonKey || null;
   const supabaseConfigured = !!supabaseUrl && !!supabaseAnonKey;
 
   const applySessionUser = (user: any) => {
