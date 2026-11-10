@@ -11,11 +11,18 @@
 // Headers MUST include a browser User-Agent (plus Accept) or Google's
 // API front door can reject the request the same way Groq did (403
 // error 1010) — see server/src/lib/groq.ts for the same pattern.
+//
+// The token is verified against Google's userinfo endpoint (not the
+// Gmail profile endpoint): userinfo works with the openid/email scopes
+// the sign-in token always has, while the Gmail profile endpoint can
+// reject a token that only carries gmail.send — which made every send
+// fail with a generic "sign in again" even after the scope was granted.
 
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 const GMAIL_API = "https://gmail.googleapis.com/gmail/v1/users/me";
+const USERINFO_API = "https://www.googleapis.com/oauth2/v3/userinfo";
 
 export interface GmailMessage {
   to: string;
@@ -23,9 +30,9 @@ export interface GmailMessage {
   body: string;
 }
 
-/** True when an error came from the Gmail API with a 401/403 — the
- *  token is expired, invalid, or missing the gmail.send scope. Callers
- *  map these to a "sign in again" status instead of a generic error. */
+/** True when an error came from Google with a 401/403 — the token is
+ *  expired, invalid, or missing the gmail.send scope. Callers map
+ *  these to a "sign in again" status instead of a generic error. */
 export function isGmailAuthError(err: unknown): boolean {
   return (
     err instanceof Error &&
@@ -34,14 +41,30 @@ export function isGmailAuthError(err: unknown): boolean {
   );
 }
 
-function gmailError(res: Response, fallback: string): Error {
-  if (res.status === 401)
-    return new Error("gmail_401: Gmail token expired or invalid");
-  if (res.status === 403)
-    return new Error(
-      "gmail_403: Gmail permission not granted (gmail.send scope missing)",
+// Read Google's own error text (e.g. "API not enabled" vs
+// "insufficient authentication scopes") so a failed send can say WHY
+// instead of a generic "sign in again". Best effort — never throws.
+async function googleDetail(res: Response): Promise<string> {
+  try {
+    const payload = (await res.clone().json()) as {
+      error?: { message?: string; status?: string };
+      error_description?: string;
+    };
+    return (
+      payload.error?.message ??
+      payload.error?.status ??
+      payload.error_description ??
+      ""
     );
-  return new Error(`gmail_error: ${fallback} (HTTP ${res.status})`);
+  } catch {
+    return "";
+  }
+}
+
+async function gmailError(res: Response, fallback: string): Promise<Error> {
+  const detail = await googleDetail(res);
+  const why = detail ? ` — ${detail}` : "";
+  return new Error(`gmail_${res.status}: ${fallback}${why} (HTTP ${res.status})`);
 }
 
 function toBase64Url(text: string): string {
@@ -82,22 +105,40 @@ export async function sendGmailMessage(
   } catch {
     throw new Error("gmail_error: Gmail is unavailable right now. Try again.");
   }
-  if (!res.ok) throw gmailError(res, "Gmail send failed");
+  if (!res.ok) throw await gmailError(res, "Gmail send failed");
   const payload = (await res.json()) as { id?: string };
   if (!payload.id)
     throw new Error("gmail_error: Gmail send returned no message id");
   return { messageId: payload.id };
 }
 
-/** The Gmail address the access token belongs to. Used to verify the
- *  token matches the signed-in account before anything is sent with
- *  it. Throws with the same gmail_ prefixes on failure. */
-export async function getGmailProfileEmail(
+/** User-facing message for a Gmail auth failure, naming the actual
+ *  cause when Google told us: an API that is not switched on in the
+ *  token's Google Cloud project, a token without the gmail.send
+ *  scope, or an expired token. Falls back to the re-sign-in line. */
+export function gmailAuthMessage(err: unknown): string {
+  const text = err instanceof Error ? err.message : "";
+  if (/not been used|has not been used|is disabled|API .* not enabled/i.test(text)) {
+    return "Gmail API is not switched on for this Google project — enable it in Google Cloud Console (APIs & Services → Library → Gmail API), then try sending again.";
+  }
+  if (/insufficient authentication scopes|insufficient.*scope/i.test(text)) {
+    return "Gmail send permission was not granted — sign out and sign in again with Google, making sure to tap Continue on the permission screen, then try sending.";
+  }
+  return "Gmail permission expired or not granted — sign out and sign in again with Google, then try sending.";
+}
+
+/** The Google account email the access token belongs to, via the
+ *  userinfo endpoint. Used to verify the token matches the signed-in
+ *  account before anything is sent with it. Works with the
+ *  openid/email scopes every sign-in token has. Throws with the same
+ *  gmail_401 / gmail_403 prefixes on failure so callers map it to the
+ *  re-sign-in status. */
+export async function getGoogleUserinfoEmail(
   accessToken: string,
 ): Promise<string> {
   let res: Response;
   try {
-    res = await fetch(`${GMAIL_API}/profile`, {
+    res = await fetch(USERINFO_API, {
       method: "GET",
       headers: {
         Authorization: `Bearer ${accessToken}`,
@@ -107,11 +148,11 @@ export async function getGmailProfileEmail(
       signal: AbortSignal.timeout(30000),
     });
   } catch {
-    throw new Error("gmail_error: Gmail is unavailable right now. Try again.");
+    throw new Error("gmail_error: Google is unavailable right now. Try again.");
   }
-  if (!res.ok) throw gmailError(res, "Gmail profile lookup failed");
-  const payload = (await res.json()) as { emailAddress?: string };
-  if (!payload.emailAddress)
-    throw new Error("gmail_error: Gmail profile returned no email address");
-  return payload.emailAddress;
+  if (!res.ok) throw await gmailError(res, "Google sign-in check failed");
+  const payload = (await res.json()) as { email?: string };
+  if (!payload.email)
+    throw new Error("gmail_error: Google sign-in returned no email address");
+  return payload.email;
 }

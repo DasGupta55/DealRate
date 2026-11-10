@@ -14,7 +14,8 @@ import {
 } from "../lib/auth";
 import { forbidden } from "../lib/errors";
 import {
-  getGmailProfileEmail,
+  getGoogleUserinfoEmail,
+  gmailAuthMessage,
   isGmailAuthError,
   sendGmailMessage,
 } from "../lib/gmail";
@@ -280,13 +281,12 @@ export async function sendInvoiceReminder(
   }
   let gmailEmail: string;
   try {
-    gmailEmail = await getGmailProfileEmail(args.gmailToken);
+    gmailEmail = await getGoogleUserinfoEmail(args.gmailToken);
   } catch (err) {
     if (isGmailAuthError(err)) {
       return {
         status: "gmail_auth_failed",
-        message:
-          "Gmail permission expired or not granted — sign out and sign in again with Google, then try sending.",
+        message: gmailAuthMessage(err),
         fromEmail: verified.email,
         draft: null,
       };
@@ -308,8 +308,7 @@ export async function sendInvoiceReminder(
     if (isGmailAuthError(err)) {
       return {
         status: "gmail_auth_failed",
-        message:
-          "Gmail permission expired or not granted — sign out and sign in again with Google, then try sending.",
+        message: gmailAuthMessage(err),
         fromEmail: verified.email,
         draft: null,
       };
@@ -398,13 +397,12 @@ export async function sendInvoice(
   }
   let gmailEmail: string;
   try {
-    gmailEmail = await getGmailProfileEmail(args.gmailToken);
+    gmailEmail = await getGoogleUserinfoEmail(args.gmailToken);
   } catch (err) {
     if (isGmailAuthError(err)) {
       return {
         status: "gmail_auth_failed",
-        message:
-          "Gmail permission expired or not granted — sign out and sign in again with Google, then try sending.",
+        message: gmailAuthMessage(err),
         fromEmail: verified.email,
         draft: null,
       };
@@ -426,8 +424,7 @@ export async function sendInvoice(
     if (isGmailAuthError(err)) {
       return {
         status: "gmail_auth_failed",
-        message:
-          "Gmail permission expired or not granted — sign out and sign in again with Google, then try sending.",
+        message: gmailAuthMessage(err),
         fromEmail: verified.email,
         draft: null,
       };

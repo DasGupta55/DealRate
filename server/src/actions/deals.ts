@@ -8,7 +8,8 @@ import { z } from "zod";
 import { DELIVERABLE_LABEL } from "../lib/pricing";
 import { requireProPlan, requireVerifiedUser } from "../lib/auth";
 import {
-  getGmailProfileEmail,
+  getGoogleUserinfoEmail,
+  gmailAuthMessage,
   isGmailAuthError,
   sendGmailMessage,
 } from "../lib/gmail";
@@ -372,13 +373,12 @@ export async function sendPitch(
   // sending anything with it.
   let gmailEmail: string;
   try {
-    gmailEmail = await getGmailProfileEmail(args.gmailToken);
+    gmailEmail = await getGoogleUserinfoEmail(args.gmailToken);
   } catch (err) {
     if (isGmailAuthError(err)) {
       return {
         status: "gmail_auth_failed",
-        message:
-          "Gmail permission expired or not granted — sign out and sign in again with Google, then try sending.",
+        message: gmailAuthMessage(err),
         fromEmail: verified.email,
         draft: null,
       };
@@ -400,8 +400,7 @@ export async function sendPitch(
     if (isGmailAuthError(err)) {
       return {
         status: "gmail_auth_failed",
-        message:
-          "Gmail permission expired or not granted — sign out and sign in again with Google, then try sending.",
+        message: gmailAuthMessage(err),
         fromEmail: verified.email,
         draft: null,
       };
