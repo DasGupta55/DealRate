@@ -18,6 +18,7 @@ import {
   dbThrow,
   requireDb,
   type ActionCtx,
+  type BrandRow,
   type CalculationRow,
   type DealRow,
   type ProfileRow,
@@ -136,7 +137,6 @@ export async function generatePitch(
   // The creator's real name (from their Google profile) so the pitch
   // signs off with it instead of a "[Your Name]" placeholder.
   const creatorName = verified.name ?? null;
-  const signOff = creatorName ? `Best regards,\n${creatorName}` : "Best regards";
   const { data: dealData, error: dealError } = await db
     .from("deals")
     .select("*")
@@ -167,7 +167,27 @@ export async function generatePitch(
   dbThrow(calcError, "generatePitch calculation");
   const calc = ((calcData ?? []) as CalculationRow[])[0];
 
+  // Brand context (products, campaigns, niche) from the saved brand
+  // this deal came from, so the email can reference something real
+  // instead of generic praise. Missing details are simply left out —
+  // the email never invents them. A failed lookup is not fatal.
+  const { data: brandData } = await db
+    .from("brands")
+    .select("*")
+    .eq("owner_id", args.userId)
+    .eq("name", deal.brand_name)
+    .order("id", { ascending: false })
+    .limit(1);
+  const brand = ((brandData ?? []) as BrandRow[])[0];
+
   const channelName = profile?.title ?? profile?.handle ?? "my channel";
+  const channelUrl = profile?.handle
+    ? `https://www.youtube.com/@${profile.handle.replace(/^@/, "")}`
+    : profile?.channel_id
+      ? `https://www.youtube.com/channel/${profile.channel_id}`
+      : null;
+  const niche = calc?.niche ?? brand?.niche ?? null;
+  const audienceCountry = calc?.audience_country ?? profile?.yt_country ?? null;
   const avgViews = profile?.avg_views ?? calc?.avg_views ?? null;
   const engagement = profile?.engagement_pct ?? calc?.engagement_pct ?? null;
   const subscribers = profile?.subscribers ?? null;
@@ -176,33 +196,159 @@ export async function generatePitch(
   const deliverableLabel =
     DELIVERABLE_LABEL[deal.deliverable] ?? "Dedicated video";
   const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
+  const feeText = price ? `${currency} ${fmt(price)}` : null;
 
-  // Template fallback (used if the AI call throws or returns empty).
-  let subject = `Partnership idea: ${channelName} x ${deal.brand_name}`;
+  // Full signature: real name, channel, channel link. Never a
+  // bracketed placeholder.
+  const signatureLines = [creatorName, channelName, channelUrl].filter(
+    (x): x is string => Boolean(x),
+  );
+  const signOff = `Best,\n${signatureLines.join("\n")}`;
+
+  // One verified stat, the strongest available — the email uses at
+  // most one number, never a list.
+  const statLine = avgViews
+    ? `My recent videos average ${fmt(avgViews)} views`
+    : engagement
+      ? `My channel runs at ${engagement.toFixed(1)}% engagement`
+      : subscribers
+        ? `My channel has ${fmt(subscribers)} subscribers`
+        : null;
+  const statsFact = [
+    subscribers ? `${fmt(subscribers)} subscribers` : null,
+    avgViews ? `average ${fmt(avgViews)} views per recent video` : null,
+    engagement ? `${engagement.toFixed(2)}% engagement` : null,
+  ]
+    .filter((x): x is string => Boolean(x))
+    .join(", ");
+
+  // Relevance sentence for the template: ties a real brand detail to
+  // the creator's niche and audience, or falls back to a neutral line
+  // that claims nothing about the product.
+  const brandDetail =
+    brand?.notes && brand.notes.length <= 140
+      ? brand.notes
+      : brand?.niche
+        ? `${brand.niche}`
+        : null;
+  const relevance = brandDetail
+    ? `I came across ${deal.brand_name}'s ${brandDetail} — it stood out as something my ${niche ?? "YouTube"} audience would genuinely find useful.`
+    : `I make ${niche ?? "YouTube"} videos, and ${deal.brand_name} caught my eye as a brand my viewers would want to hear about.`;
+
+  // --- Template fallback. Same structure and rules as the AI email,
+  // so the pitch still reads well when Groq is down. ---
+  let subject = `Content idea for ${deal.brand_name} × ${channelName}`;
   let body = [
-    `Hi ${deal.brand_name} team,`,
+    `Hi ${deal.brand_name} Partnerships Team,`,
     ``,
-    `I run ${channelName}${subscribers ? ` (${fmt(subscribers)} subscribers)` : ""} on YouTube. My recent videos average ${avgViews ? fmt(avgViews) + " views" : "strong viewership"}${engagement ? ` with ${engagement.toFixed(2)}% engagement (likes + comments)` : ""} — a real, active audience, not just reach.`,
+    relevance,
     ``,
-    `I'd love to create a ${deliverableLabel.toLowerCase()} featuring ${deal.brand_name}. Based on my channel's actual views and engagement, my rate for this deliverable is ${price ? `${currency} ${fmt(price)}` : "available on request"}. I'm happy to share my media kit and past results.`,
+    `I'd like to make a ${deliverableLabel.toLowerCase()} that puts ${deal.brand_name} into a real ${niche ?? "creator"} workflow — showing how it works, who it's for, and where it fits, instead of a straight advertisement.`,
     ``,
-    `Open to a quick call this week to discuss fit and timelines?`,
+    ...(statLine ? [`${statLine}.`, ``] : []),
+    feeText
+      ? `My proposed fee for this ${deliverableLabel.toLowerCase()} is ${feeText}.`
+      : `My rate for this deliverable is available on request.`,
+    ``,
+    `Would you be open to discussing this collaboration?`,
     ``,
     signOff,
   ].join("\n");
-  // Replace any bracketed name placeholder the AI leaves behind with the
-  // creator's real name, so a pitch never goes out signed "[Your Name]".
+
+  // Replace any bracketed name placeholder the AI leaves behind with
+  // the creator's real name, so a pitch never goes out signed
+  // "[Your Name]".
   const fillName = (text: string): string =>
     creatorName ? text.replace(/\[(?:your\s+)?name\]/gi, creatorName) : text;
+
+  // Final quality test (the brief's checklist, enforced in code):
+  // sounds human, relevant to this brand, clear idea, one stat max,
+  // exact fee, one simple question, no invented facts, concise.
+  // Anything that fails falls back to the template above.
+  const BANNED: string[] = [
+    "i am reaching out",
+    "reaching out to you",
+    "amazing brand",
+    "love your brand",
+    "love your products",
+    "overview, usage demonstration",
+    "call to action",
+    "guarantee",
+    "will go viral",
+    "guaranteed",
+    "limited time",
+    "don't miss",
+  ];
+  const feeForms: string[] = price
+    ? [
+        `${currency} ${fmt(price)}`,
+        `${fmt(price)} ${currency}`,
+        ...(currency === "USD" ? [`$${fmt(price)}`] : []),
+      ]
+    : [];
+  const passesGate = (s: string, b: string): boolean => {
+    const words = b.trim().split(/\s+/).length;
+    if (words < 60 || words > 180) return false;
+    if (/\[[^\]\n]+\]/.test(b) || /\[[^\]\n]+\]/.test(s)) return false;
+    if (!s.includes(deal.brand_name) || s.length > 80) return false;
+    const lower = b.toLowerCase();
+    if (BANNED.some((p) => lower.includes(p))) return false;
+    if ((b.match(/\?/g) ?? []).length !== 1) return false;
+    if (price && !feeForms.some((f) => b.includes(f))) return false;
+    if (!price && !lower.includes("available on request")) return false;
+    if (creatorName && !b.includes(creatorName)) return false;
+    if (channelUrl && !b.includes(channelUrl)) return false;
+    return true;
+  };
+
   try {
+    const brandContext = brandDetail
+      ? `Product/campaign detail from the saved brand: ${brandDetail}.`
+      : "No product detail supplied — keep the relevance line to the creator's niche and audience.";
     const ai = await chatGroqJson<{ subject: string; body: string }>(
       ctx.env.groqApiKey ?? "",
-      "You write short, human-sounding cold pitch emails. Reply with a single JSON object only, no other text.",
-      `Write a short, human-sounding cold pitch email (under 160 words) from a YouTube creator to a brand. Facts you must use exactly: channel "${channelName}"${subscribers ? `, ${fmt(subscribers)} subscribers` : ""}${avgViews ? `, average ${fmt(avgViews)} views on the last 10 videos` : ""}${engagement ? `, ${engagement.toFixed(2)}% engagement` : ""}. Brand: ${deal.brand_name}. Deliverable: ${deliverableLabel}. Rate: ${price ? `${currency} ${fmt(price)}` : "not stated — say rate available on request"}. Tone: confident, specific, no hype words, no placeholders.${creatorName ? ` Sign off with the creator's real name: ${creatorName}. Never write [Your Name], [Name], or any bracketed placeholder.` : ""}`,
+      "You write brand outreach emails from a real YouTube creator to a brand. Reply with a single JSON object {subject, body} only — no other text, no explanations.",
+      [
+        `Write one outreach email, 80–130 words, that sounds personally written by the creator after researching the brand. Specific, confident, human. No hype, no jargon, no emojis.`,
+        ``,
+        `FACTS — use only these. Never invent a product detail, statistic, or claim that is not listed. Leave out anything missing instead of guessing.`,
+        `- Creator: ${creatorName ?? "name not given"}. Channel: "${channelName}"${channelUrl ? ` (${channelUrl})` : ""}. Niche: ${niche ?? "not given"}. Audience: ${audienceCountry ?? "not given"}.`,
+        `- Verified stats (use at most ONE, the strongest): ${statsFact || "none available"}.`,
+        `- Brand: ${deal.brand_name}. ${brandContext}`,
+        `- Deal: ${deliverableLabel} on YouTube. Proposed fee: ${feeText ?? "not set — write 'My rate for this deliverable is available on request.'"} (state the exact amount and currency, tied to the deliverable).`,
+        `- Contact name: not available.`,
+        ...(deal.notes ? [`- Creator notes: ${deal.notes}`] : []),
+        ``,
+        `STRUCTURE, in order:`,
+        `1. Subject: natural and specific, e.g. "Content idea for ${deal.brand_name} × ${channelName}". No clickbait, no extra punctuation.`,
+        `2. Greeting: "Hi ${deal.brand_name} Partnerships Team,"`,
+        `3. Why this brand: one or two sentences tying a real product/feature/campaign from the facts to the creator's audience. Never claim the creator used, loved, bought, or recommends the product.`,
+        `4. The content idea: a specific ${deliverableLabel.toLowerCase()} concept for this brand and niche — what the video actually shows. Never the generic "overview, usage demonstration, and a call to action".`,
+        `5. At most one verified stat.`,
+        `6. The fee, exactly as given, tied to the deliverable.`,
+        `7. End with ONE simple question, e.g. "Would you be open to discussing this collaboration?"`,
+        `8. Sign off exactly:`,
+        `Best,`,
+        ...(creatorName ? [creatorName] : []),
+        channelName,
+        ...(channelUrl ? [channelUrl] : []),
+        `Never write a bracketed placeholder such as [Your Name].`,
+        ``,
+        `RULES: 80–130 words. Short paragraphs. Do not write "I am reaching out". No fake compliments ("amazing brand"). No promised timeline, sales, views, or results. Do not write as if a partnership is agreed. Do not sound desperate. One question only.`,
+      ].join("\n"),
     );
     if (ai.subject && ai.body) {
-      subject = fillName(ai.subject);
-      body = fillName(ai.body);
+      let aiSubject = fillName(ai.subject.trim());
+      let aiBody = fillName(ai.body.trim());
+      // Repair: if the AI left the signature off, add it before the
+      // quality check so a good email is not discarded for that alone.
+      if (creatorName && !aiBody.includes(creatorName)) {
+        aiBody = `${aiBody}\n\n${signOff}`;
+      }
+      if (passesGate(aiSubject, aiBody)) {
+        subject = aiSubject;
+        body = aiBody;
+      }
     }
   } catch {
     // Template above is the fallback; it uses the same real numbers.
