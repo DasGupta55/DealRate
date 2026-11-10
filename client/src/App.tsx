@@ -2451,7 +2451,9 @@ function BrandsTab({ data, userId, accessToken, invalidate, goDeals }: { data: D
         >
           <div>
             <label className={labelCls} htmlFor="b-niche">Niche</label>
-            <input id="b-niche" className={inputCls} value={niche} onChange={(e) => setNiche(e.target.value)} />
+            <select id="b-niche" className={inputCls} value={niche} onChange={(e) => setNiche(e.target.value)}>
+              {Object.keys(NICHE_MULT).map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
           </div>
           <div>
             <label className={labelCls} htmlFor="b-country">Country</label>

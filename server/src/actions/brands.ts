@@ -26,16 +26,31 @@ export async function discoverBrands(
   const db = requireDb(ctx);
   await requireVerifiedUser(ctx, args.userId, args.accessToken);
   await requireProPlan(ctx, args.userId);
-  const results = await searchTavily(
+  let results = await searchTavily(
     ctx.env.tavilyApiKey ?? "",
     `brands influencer marketing creator partnership program ${args.niche} creators ${args.country} apply`,
   );
+  // If the first query comes back empty, retry once with a simpler query
+  // before giving up — a keyword-stuffed query can return nothing even
+  // when good matches exist.
+  if (results.length === 0) {
+    results = await searchTavily(
+      ctx.env.tavilyApiKey ?? "",
+      `${args.niche} brands influencer partnership ${args.country}`,
+    );
+  }
   const top = results.slice(0, 10);
   type Suggestion = { name: string; why: string; sourceUrl: string | null };
   let suggestions: Suggestion[] = [];
   try {
     const distilled = await chatGroqJson<{
-      brands: { name: string; why: string; sourceUrl: string }[];
+      brands: {
+        name: string;
+        why?: string;
+        reason?: string;
+        sourceUrl?: string;
+        url?: string;
+      }[];
     }>(
       ctx.env.groqApiKey ?? "",
       "You extract structured data from web search results. Reply with a single JSON object only, no other text.",
@@ -46,13 +61,19 @@ export async function discoverBrands(
         )
         .join("\n")}`,
     );
+    // The model may name the fields "reason"/"url" instead of
+    // "why"/"sourceUrl" — accept either, so notes and links save.
     suggestions = (distilled.brands ?? []).map((b) => ({
       name: b.name,
-      why: b.why,
-      sourceUrl: b.sourceUrl || null,
+      why: b.why ?? b.reason ?? "",
+      sourceUrl: b.sourceUrl ?? b.url ?? null,
     }));
   } catch {
-    // Fallback: raw search sources, exactly as in the source.
+    suggestions = [];
+  }
+  // Fallback: if the AI step yields nothing (empty reply or a parse
+  // failure), use the raw search sources instead of returning zero.
+  if (suggestions.length === 0) {
     suggestions = results.slice(0, 6).map((s) => ({
       name: s.title.slice(0, 60),
       why: "Found in web search results for your niche.",
