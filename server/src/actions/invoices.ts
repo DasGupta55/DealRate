@@ -343,8 +343,8 @@ export const sendInvoiceSchema = z.object({
 
 /** One-click invoice send: emails the invoice itself straight from the
  *  creator's own Gmail via the Gmail API, then marks the invoice sent.
- *  Body mirrors the invoice download (same lines as the invoiceText
- *  helper) plus a closing line asking for payment by the due date. */
+ *  Body mirrors the invoice details (same facts as the designed
+ *  invoice download) plus a closing line asking for payment by the due date. */
 export async function sendInvoice(
   ctx: ActionCtx,
   args: z.infer<typeof sendInvoiceSchema>,

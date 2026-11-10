@@ -336,17 +336,118 @@ function emlFor(draft: { toEmail: string; subject: string; body: string }, fromE
   ].filter((l) => l !== null).join("\n");
 }
 
-function invoiceText(inv: Invoice, fromEmail: string | null): string {
-  return [
-    `INVOICE ${inv.invoiceNumber}`,
-    fromEmail ? `From: ${fromEmail}` : null,
-    `Billed to: ${inv.brandName}${inv.brandEmail ? ` <${inv.brandEmail}>` : ""}`,
-    `Amount: ${formatMoney(inv.amount, inv.currency)}`,
-    `Issued: ${inv.issueDate}`,
-    `Due: ${inv.dueDate}`,
-    `Status: ${inv.status}`,
-    inv.description ? `For: ${inv.description}` : null,
-  ].filter((l) => l !== null).join("\n");
+function downloadHtmlFile(filename: string, content: string) {
+  const blob = new Blob([content], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 2000);
+}
+
+function escHtml(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
+/** A designed, print-friendly invoice document (standalone HTML).
+ *  White background so it prints cleanly; the DealRate wordmark and
+ *  lime accent carry the brand. The status stamp never implies paid:
+ *  PAID only when the invoice is actually paid, OVERDUE only when a
+ *  sent invoice is past its due date, otherwise SENT or DRAFT. */
+function invoiceHtml(inv: Invoice, fromEmail: string | null): string {
+  const paid = inv.status === "paid";
+  const overdue = !paid && inv.status === "sent" && inv.daysOverdue > 0;
+  const statusLabel = paid ? "PAID" : overdue ? "OVERDUE" : inv.status.toUpperCase();
+  const statusClass = paid ? "paid" : overdue ? "overdue" : inv.status === "sent" ? "sent" : "draft";
+  const amount = formatMoney(inv.amount, inv.currency);
+  const desc = inv.description || "Content collaboration";
+  const contactEmail = fromEmail && fromEmail !== BUSINESS_CONFIG.supportEmail ? fromEmail : null;
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Invoice ${escHtml(inv.invoiceNumber)} — DealRate</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; background: #f4f4f2; color: #0a0a0f; font-family: Inter, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .page { max-width: 720px; margin: 32px auto; background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 8px 30px rgba(0,0,0,.12); }
+  .bar { height: 6px; background: #c8ff3d; }
+  .inner { padding: 32px 36px 28px; }
+  .brand { font-size: 15px; font-weight: 800; letter-spacing: .04em; }
+  .brand span { color: #7c5cff; }
+  h1 { margin: 18px 0 0; font-size: 34px; letter-spacing: -.02em; }
+  .invno { margin-top: 4px; font-size: 15px; color: #55555e; }
+  .stamp { display: inline-block; margin-top: 14px; padding: 5px 12px; border-radius: 999px; font-size: 12px; font-weight: 800; letter-spacing: .08em; }
+  .stamp.paid { background: #c8ff3d; color: #0a0a0f; }
+  .stamp.sent { background: #eef0ff; color: #4b3fd6; }
+  .stamp.draft { background: #f0f0ee; color: #55555e; }
+  .stamp.overdue { background: #ffe3e3; color: #b3261e; }
+  .parties { display: flex; flex-wrap: wrap; gap: 24px; margin-top: 28px; }
+  .parties > div { flex: 1 1 220px; }
+  h2 { margin: 0 0 6px; font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; color: #8a8a93; }
+  p { margin: 2px 0; font-size: 14px; line-height: 1.5; }
+  .dates { display: flex; gap: 32px; margin-top: 26px; padding-top: 18px; border-top: 1px solid #ececee; font-size: 14px; }
+  .dates b { display: block; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: #8a8a93; margin-bottom: 2px; }
+  table { width: 100%; margin-top: 26px; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: #8a8a93; padding: 0 0 8px; border-bottom: 2px solid #0a0a0f; }
+  th:last-child, td:last-child { text-align: right; }
+  td { padding: 14px 0; border-bottom: 1px solid #ececee; vertical-align: top; }
+  .total td { border-bottom: none; padding-top: 16px; font-size: 18px; font-weight: 800; }
+  .note { margin-top: 22px; font-size: 13px; color: #55555e; }
+  footer { margin-top: 30px; padding-top: 16px; border-top: 1px solid #ececee; font-size: 12px; color: #8a8a93; }
+  @media print {
+    body { background: #fff; }
+    .page { margin: 0; max-width: none; border-radius: 0; box-shadow: none; }
+  }
+  @media (max-width: 560px) { .inner { padding: 24px 20px; } h1 { font-size: 28px; } }
+</style>
+</head>
+<body>
+  <div class="page">
+    <div class="bar"></div>
+    <div class="inner">
+      <div class="brand">Deal<span>Rate</span></div>
+      <h1>Invoice</h1>
+      <div class="invno">${escHtml(inv.invoiceNumber)}</div>
+      <span class="stamp ${statusClass}">${statusLabel}</span>
+      <div class="parties">
+        <div>
+          <h2>From</h2>
+          <p><strong>${escHtml(BUSINESS_CONFIG.businessName)}</strong></p>
+          <p>${escHtml(BUSINESS_CONFIG.businessAddress)}</p>
+          <p>${escHtml(BUSINESS_CONFIG.businessPhone)}</p>
+          <p>${escHtml(BUSINESS_CONFIG.supportEmail)}</p>
+          ${contactEmail ? `<p>${escHtml(contactEmail)}</p>` : ""}
+        </div>
+        <div>
+          <h2>Billed to</h2>
+          <p><strong>${escHtml(inv.brandName)}</strong></p>
+          ${inv.brandEmail ? `<p>${escHtml(inv.brandEmail)}</p>` : ""}
+        </div>
+      </div>
+      <div class="dates">
+        <div><b>Issued</b>${escHtml(inv.issueDate)}</div>
+        <div><b>Due</b>${escHtml(inv.dueDate)}</div>
+      </div>
+      <table>
+        <thead><tr><th>Description</th><th>Amount</th></tr></thead>
+        <tbody>
+          <tr><td>${escHtml(desc)}</td><td>${escHtml(amount)}</td></tr>
+        </tbody>
+        <tfoot>
+          <tr class="total"><td>Total</td><td>${escHtml(amount)}</td></tr>
+        </tfoot>
+      </table>
+      <p class="note">Please process the payment by ${escHtml(inv.dueDate)}.${paid ? " Thank you — this invoice is paid." : " If anything is blocking it, just reply and we'll help."}</p>
+      <footer>Powered by DealRate · dealrate.netlify.app</footer>
+    </div>
+  </div>
+</body>
+</html>`;
 }
 
 function SendsFrom({ data }: { data: Dash }) {
@@ -2909,9 +3010,67 @@ function DealsTab({ data, userId, accessToken, invalidate, goInvoices, autoResea
 
 /* ---------------- Invoices tab ---------------- */
 
+/* ---------------- Designed invoice preview ---------------- */
+
+function InvoicePreview({ inv, fromEmail, open, onClose }: { inv: Invoice; fromEmail: string | null; open: boolean; onClose: () => void }) {
+  const reduce = useReducedMotion();
+  const frameRef = useRef<HTMLIFrameElement | null>(null);
+  const html = invoiceHtml(inv, fromEmail);
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          <motion.div
+            key="inv-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-40 bg-black/60"
+            onClick={onClose}
+            aria-hidden
+          />
+          <motion.div
+            key="inv-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Invoice ${inv.invoiceNumber}`}
+            initial={reduce ? { opacity: 0 } : { y: "105%" }}
+            animate={reduce ? { opacity: 1 } : { y: 0 }}
+            exit={reduce ? { opacity: 0 } : { y: "105%" }}
+            transition={reduce ? { duration: 0.15 } : { duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+            className="fixed inset-x-0 bottom-0 z-50 mx-auto flex h-[88dvh] w-full max-w-3xl flex-col rounded-t-[28px] bg-[var(--surface)] px-4 pb-safe pt-3"
+          >
+            <div className="mx-auto h-1.5 w-10 rounded-full bg-white/25" aria-hidden />
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <p className="font-display text-lg font-bold">Invoice {inv.invoiceNumber}</p>
+              <button type="button" className={btnGhost} onClick={onClose}>Close</button>
+            </div>
+            <iframe
+              ref={frameRef}
+              title={`Invoice ${inv.invoiceNumber}`}
+              srcDoc={html}
+              className="mt-3 min-h-0 flex-1 rounded-2xl border border-[var(--border)] bg-white"
+            />
+            <div className="flex flex-wrap gap-2 py-3">
+              <button type="button" className={btnPrimary} onClick={() => downloadHtmlFile(`invoice-${inv.invoiceNumber}.html`, html)}>
+                Download
+              </button>
+              <button type="button" className={btnGhost} onClick={() => frameRef.current?.contentWindow?.print()}>
+                Print / Save as PDF
+              </button>
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
 function InvoiceCard({ inv, data, userId, accessToken, invalidate, index = 0 }: { inv: Invoice; data: Dash; userId: string; accessToken?: string; invalidate: () => void; index?: number }) {
   const reduce = useReducedMotion();
   const [msg, setMsg] = useState("");
+  const [previewOpen, setPreviewOpen] = useState(false);
   const [lastDraft, setLastDraft] = useState<{ toEmail: string; subject: string; body: string } | null>(null);
   const [remFallback, setRemFallback] = useState(false);
   const overdue = inv.daysOverdue > 0 && inv.status !== "paid";
@@ -3045,7 +3204,10 @@ function InvoiceCard({ inv, data, userId, accessToken, invalidate, index = 0 }: 
                 {remDraftMut.isPending ? "Preparing…" : "Download reminder (.eml)"}
               </button>
             )}
-            <button type="button" className={btnGhost} onClick={() => downloadTextFile(`invoice-${inv.invoiceNumber}.txt`, invoiceText(inv, data.senderEmail))}>
+            <button type="button" className={btnGhost} onClick={() => setPreviewOpen(true)}>
+              View invoice
+            </button>
+            <button type="button" className={btnGhost} onClick={() => downloadHtmlFile(`invoice-${inv.invoiceNumber}.html`, invoiceHtml(inv, data.senderEmail))}>
               Download invoice
             </button>
             <button type="button" className={btnPrimary} onClick={() => api.updateInvoiceStatus({ userId, accessToken, id: inv.id, status: "paid" }).then(invalidate)}>Mark paid</button>
@@ -3058,6 +3220,7 @@ function InvoiceCard({ inv, data, userId, accessToken, invalidate, index = 0 }: 
         <p className="px-4 pb-2 text-xs text-[var(--dim)]">Reminder downloaded as a draft — open it and send it from your Gmail.</p>
       )}
       {msg && <p className="px-4 pb-4 text-sm text-[var(--dim)]" role="status">{msg}</p>}
+      <InvoicePreview inv={inv} fromEmail={data.senderEmail} open={previewOpen} onClose={() => setPreviewOpen(false)} />
     </motion.li>
   );
 }
