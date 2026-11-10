@@ -30,6 +30,10 @@ export const OWNER_EMAIL_SERVER = "iampartha160920@gmail.com";
 export interface VerifiedUser {
   id: string;
   email: string | null;
+  // Display name from the Google profile (Supabase user_metadata), used
+  // so generated pitches sign off with the creator's real name instead
+  // of a "[Your Name]" placeholder. Null when Google did not supply one.
+  name: string | null;
 }
 
 export const isGuestId = (id: string): boolean => id.startsWith("guest-");
@@ -63,6 +67,7 @@ export async function verifyUserToken(
       id?: unknown;
       email?: unknown;
       app_metadata?: { provider?: unknown; providers?: unknown };
+      user_metadata?: { full_name?: unknown; name?: unknown };
     };
     if (typeof u?.id !== "string" || u.id !== userId) return null;
     const meta = u.app_metadata ?? {};
@@ -71,7 +76,14 @@ export async function verifyUserToken(
       (Array.isArray(meta.providers) && meta.providers.includes("google"));
     if (!isGoogle) return null;
     const email = typeof u.email === "string" ? u.email : null;
-    return { id: userId, email };
+    const userMeta = u.user_metadata ?? {};
+    const name =
+      typeof userMeta.full_name === "string" && userMeta.full_name.trim()
+        ? userMeta.full_name.trim()
+        : typeof userMeta.name === "string" && userMeta.name.trim()
+          ? userMeta.name.trim()
+          : null;
+    return { id: userId, email, name };
   } catch {
     return null;
   }
@@ -118,6 +130,7 @@ export async function verifyToken(
       id?: unknown;
       email?: unknown;
       app_metadata?: { provider?: unknown; providers?: unknown };
+      user_metadata?: { full_name?: unknown; name?: unknown };
     };
     if (typeof u?.id !== "string") return null;
     const meta = u.app_metadata ?? {};
@@ -126,7 +139,14 @@ export async function verifyToken(
       (Array.isArray(meta.providers) && meta.providers.includes("google"));
     if (!isGoogle) return null;
     const email = typeof u.email === "string" ? u.email : null;
-    return { id: u.id, email };
+    const userMeta = u.user_metadata ?? {};
+    const name =
+      typeof userMeta.full_name === "string" && userMeta.full_name.trim()
+        ? userMeta.full_name.trim()
+        : typeof userMeta.name === "string" && userMeta.name.trim()
+          ? userMeta.name.trim()
+          : null;
+    return { id: u.id, email, name };
   } catch {
     return null;
   }

@@ -130,8 +130,12 @@ export async function generatePitch(
   args: z.infer<typeof generatePitchSchema>,
 ): Promise<{ subject: string; body: string }> {
   const db = requireDb(ctx);
-  await requireVerifiedUser(ctx, args.userId, args.accessToken);
+  const verified = await requireVerifiedUser(ctx, args.userId, args.accessToken);
   await requireProPlan(ctx, args.userId);
+  // The creator's real name (from their Google profile) so the pitch
+  // signs off with it instead of a "[Your Name]" placeholder.
+  const creatorName = verified.name ?? null;
+  const signOff = creatorName ? `Best regards,\n${creatorName}` : "Best regards";
   const { data: dealData, error: dealError } = await db
     .from("deals")
     .select("*")
@@ -183,17 +187,21 @@ export async function generatePitch(
     ``,
     `Open to a quick call this week to discuss fit and timelines?`,
     ``,
-    `Best regards`,
+    signOff,
   ].join("\n");
+  // Replace any bracketed name placeholder the AI leaves behind with the
+  // creator's real name, so a pitch never goes out signed "[Your Name]".
+  const fillName = (text: string): string =>
+    creatorName ? text.replace(/\[(?:your\s+)?name\]/gi, creatorName) : text;
   try {
     const ai = await chatGroqJson<{ subject: string; body: string }>(
       ctx.env.groqApiKey ?? "",
       "You write short, human-sounding cold pitch emails. Reply with a single JSON object only, no other text.",
-      `Write a short, human-sounding cold pitch email (under 160 words) from a YouTube creator to a brand. Facts you must use exactly: channel "${channelName}"${subscribers ? `, ${fmt(subscribers)} subscribers` : ""}${avgViews ? `, average ${fmt(avgViews)} views on the last 10 videos` : ""}${engagement ? `, ${engagement.toFixed(2)}% engagement` : ""}. Brand: ${deal.brand_name}. Deliverable: ${deliverableLabel}. Rate: ${price ? `${currency} ${fmt(price)}` : "not stated — say rate available on request"}. Tone: confident, specific, no hype words, no placeholders.`,
+      `Write a short, human-sounding cold pitch email (under 160 words) from a YouTube creator to a brand. Facts you must use exactly: channel "${channelName}"${subscribers ? `, ${fmt(subscribers)} subscribers` : ""}${avgViews ? `, average ${fmt(avgViews)} views on the last 10 videos` : ""}${engagement ? `, ${engagement.toFixed(2)}% engagement` : ""}. Brand: ${deal.brand_name}. Deliverable: ${deliverableLabel}. Rate: ${price ? `${currency} ${fmt(price)}` : "not stated — say rate available on request"}. Tone: confident, specific, no hype words, no placeholders.${creatorName ? ` Sign off with the creator's real name: ${creatorName}. Never write [Your Name], [Name], or any bracketed placeholder.` : ""}`,
     );
     if (ai.subject && ai.body) {
-      subject = ai.subject;
-      body = ai.body;
+      subject = fillName(ai.subject);
+      body = fillName(ai.body);
     }
   } catch {
     // Template above is the fallback; it uses the same real numbers.
