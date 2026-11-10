@@ -1,5 +1,8 @@
-// Invoices + reminders + the daily overdue check. Drafts only — nothing
-// is ever sent by the server.
+// Invoices + reminders + the daily overdue check. requestInvoiceReminder
+// only saves a draft for the client to download as .eml; sendInvoice and
+// sendInvoiceReminder send in one tap through the Gmail API, using the
+// creator's own Google access token (gmail.send scope) — never the app
+// owner's Gmail.
 
 import { z } from "zod";
 import { addDays, todayKolkata } from "../lib/pricing";
@@ -10,6 +13,11 @@ import {
   requireVerifiedUser,
 } from "../lib/auth";
 import { forbidden } from "../lib/errors";
+import {
+  getGmailProfileEmail,
+  isGmailAuthError,
+  sendGmailMessage,
+} from "../lib/gmail";
 import {
   dbThrow,
   requireDb,
@@ -210,6 +218,244 @@ export async function requestInvoiceReminder(
       : "Reminder saved as a draft and downloaded as an .eml — open it and send it from your own Gmail. Nothing is ever sent through the app owner's Gmail.",
     fromEmail: gmailEmail,
     draft: draftPayload,
+  };
+}
+
+export const sendInvoiceReminderSchema = z.object({
+  userId: userIdArg,
+  accessToken: z.string().optional(),
+  invoiceId: z.number(),
+  gmailToken: z.string(),
+});
+
+/** One-click payment-reminder send: same subject/body as
+ *  requestInvoiceReminder, delivered straight from the creator's own
+ *  Gmail via the Gmail API. The Google access token is verified against
+ *  the signed-in account first; a 401/403 becomes a "sign in again"
+ *  status. */
+export async function sendInvoiceReminder(
+  ctx: ActionCtx,
+  args: z.infer<typeof sendInvoiceReminderSchema>,
+): Promise<PitchDraft> {
+  const db = requireDb(ctx);
+  const verified = await requireVerifiedUser(ctx, args.userId, args.accessToken);
+  await requireProPlan(ctx, args.userId);
+  const { data, error } = await db
+    .from("invoices")
+    .select("*")
+    .eq("id", args.invoiceId)
+    .eq("owner_id", args.userId)
+    .limit(1)
+    .maybeSingle();
+  dbThrow(error, "sendInvoiceReminder invoice");
+  const inv = (data ?? null) as InvoiceRow | null;
+  if (!inv) throw new Error("Invoice not found");
+  const noDraft = { fromEmail: null, draft: null };
+  if (!inv.brand_email) {
+    return {
+      status: "needs_email",
+      message:
+        "This invoice has no brand email saved, so a reminder can't be addressed. Add the brand email by recreating the invoice from the deal.",
+      ...noDraft,
+    };
+  }
+  const subject = `Payment reminder: invoice ${inv.invoice_number} (${inv.currency} ${Math.round(inv.amount).toLocaleString("en-US")})`;
+  const body = [
+    `Hi ${inv.brand_name} team,`,
+    ``,
+    `A friendly reminder that invoice ${inv.invoice_number} for ${inv.currency} ${Math.round(inv.amount).toLocaleString("en-US")} (${inv.description || "content collaboration"}) was issued on ${inv.issue_date} and was due on ${inv.due_date}. It is currently unpaid.`,
+    ``,
+    `Could you please process the payment, or let me know if you need the invoice re-sent or any details from my side?`,
+    ``,
+    `Thank you,`,
+    `Looking forward to working together again.`,
+  ].join("\n");
+  if (!args.gmailToken.trim()) {
+    return {
+      status: "gmail_not_connected",
+      message:
+        "Sign out and sign in again with Google to connect Gmail for one-click sending.",
+      ...noDraft,
+    };
+  }
+  let gmailEmail: string;
+  try {
+    gmailEmail = await getGmailProfileEmail(args.gmailToken);
+  } catch (err) {
+    if (isGmailAuthError(err)) {
+      return {
+        status: "gmail_auth_failed",
+        message:
+          "Gmail permission expired or not granted — sign out and sign in again with Google, then try sending.",
+        fromEmail: verified.email,
+        draft: null,
+      };
+    }
+    throw err;
+  }
+  if (gmailEmail.toLowerCase() !== (verified.email ?? "").toLowerCase()) {
+    throw new Error(
+      "gmail_mismatch: the Gmail token does not match the signed-in account",
+    );
+  }
+  try {
+    await sendGmailMessage(args.gmailToken, {
+      to: inv.brand_email,
+      subject,
+      body,
+    });
+  } catch (err) {
+    if (isGmailAuthError(err)) {
+      return {
+        status: "gmail_auth_failed",
+        message:
+          "Gmail permission expired or not granted — sign out and sign in again with Google, then try sending.",
+        fromEmail: verified.email,
+        draft: null,
+      };
+    }
+    throw err;
+  }
+  const { error: insertError } = await db.from("reminders").insert({
+    owner_id: args.userId,
+    from_email: verified.email,
+    invoice_id: inv.id,
+    kind: "invoice_reminder",
+    to_email: inv.brand_email,
+    subject,
+    body,
+    status: "sent",
+  });
+  dbThrow(insertError, "sendInvoiceReminder insert");
+  return {
+    status: "sent",
+    message: `Payment reminder sent from your Gmail (${verified.email}) to ${inv.brand_email}.`,
+    fromEmail: verified.email,
+    draft: null,
+  };
+}
+
+export const sendInvoiceSchema = z.object({
+  userId: userIdArg,
+  accessToken: z.string().optional(),
+  invoiceId: z.number(),
+  gmailToken: z.string(),
+});
+
+/** One-click invoice send: emails the invoice itself straight from the
+ *  creator's own Gmail via the Gmail API, then marks the invoice sent.
+ *  Body mirrors the invoice download (same lines as the invoiceText
+ *  helper) plus a closing line asking for payment by the due date. */
+export async function sendInvoice(
+  ctx: ActionCtx,
+  args: z.infer<typeof sendInvoiceSchema>,
+): Promise<PitchDraft> {
+  const db = requireDb(ctx);
+  const verified = await requireVerifiedUser(ctx, args.userId, args.accessToken);
+  await requireProPlan(ctx, args.userId);
+  const { data, error } = await db
+    .from("invoices")
+    .select("*")
+    .eq("id", args.invoiceId)
+    .eq("owner_id", args.userId)
+    .limit(1)
+    .maybeSingle();
+  dbThrow(error, "sendInvoice invoice");
+  const inv = (data ?? null) as InvoiceRow | null;
+  if (!inv) throw new Error("Invoice not found");
+  const noDraft = { fromEmail: null, draft: null };
+  if (!inv.brand_email) {
+    return {
+      status: "needs_email",
+      message:
+        "This invoice has no brand email saved, so it can't be sent. Add the brand email by recreating the invoice from the deal.",
+      ...noDraft,
+    };
+  }
+  const amount = Math.round(inv.amount).toLocaleString("en-US");
+  const subject = `Invoice ${inv.invoice_number} — ${inv.currency} ${amount} for ${inv.description || "content collaboration"}`;
+  const body = [
+    `INVOICE ${inv.invoice_number}`,
+    verified.email ? `From: ${verified.email}` : null,
+    `Billed to: ${inv.brand_name}${inv.brand_email ? ` <${inv.brand_email}>` : ""}`,
+    `Amount: ${inv.currency} ${amount}`,
+    `Issued: ${inv.issue_date}`,
+    `Due: ${inv.due_date}`,
+    `Status: ${inv.status}`,
+    inv.description ? `For: ${inv.description}` : null,
+    ``,
+    `Please process the payment by ${inv.due_date}. If anything is blocking it, just reply and I'll help.`,
+  ]
+    .filter((l) => l !== null)
+    .join("\n");
+  if (!args.gmailToken.trim()) {
+    return {
+      status: "gmail_not_connected",
+      message:
+        "Sign out and sign in again with Google to connect Gmail for one-click sending.",
+      ...noDraft,
+    };
+  }
+  let gmailEmail: string;
+  try {
+    gmailEmail = await getGmailProfileEmail(args.gmailToken);
+  } catch (err) {
+    if (isGmailAuthError(err)) {
+      return {
+        status: "gmail_auth_failed",
+        message:
+          "Gmail permission expired or not granted — sign out and sign in again with Google, then try sending.",
+        fromEmail: verified.email,
+        draft: null,
+      };
+    }
+    throw err;
+  }
+  if (gmailEmail.toLowerCase() !== (verified.email ?? "").toLowerCase()) {
+    throw new Error(
+      "gmail_mismatch: the Gmail token does not match the signed-in account",
+    );
+  }
+  try {
+    await sendGmailMessage(args.gmailToken, {
+      to: inv.brand_email,
+      subject,
+      body,
+    });
+  } catch (err) {
+    if (isGmailAuthError(err)) {
+      return {
+        status: "gmail_auth_failed",
+        message:
+          "Gmail permission expired or not granted — sign out and sign in again with Google, then try sending.",
+        fromEmail: verified.email,
+        draft: null,
+      };
+    }
+    throw err;
+  }
+  const { error: updateError } = await db
+    .from("invoices")
+    .update({ status: "sent" })
+    .eq("id", args.invoiceId)
+    .eq("owner_id", args.userId);
+  dbThrow(updateError, "sendInvoice update");
+  const { error: insertError } = await db.from("reminders").insert({
+    owner_id: args.userId,
+    from_email: verified.email,
+    invoice_id: inv.id,
+    kind: "invoice",
+    to_email: inv.brand_email,
+    subject,
+    body,
+    status: "sent",
+  });
+  dbThrow(insertError, "sendInvoice insert");
+  return {
+    status: "sent",
+    message: `Invoice ${inv.invoice_number} sent from your Gmail (${verified.email}) to ${inv.brand_email}.`,
+    fromEmail: verified.email,
+    draft: null,
   };
 }
 

@@ -1,11 +1,17 @@
 // Deals + pitches: pipeline CRUD, AI pitch generation (Groq, template
-// fallback), and pitch drafts. Nothing is ever sent by the server —
-// requestSendPitch only saves a ready-to-send draft for the client to
-// download as .eml and send from the creator's own Gmail.
+// fallback), and pitch sending. requestSendPitch only saves a
+// ready-to-send draft for the client to download as .eml; sendPitch
+// sends in one tap through the Gmail API, using the creator's own
+// Google access token (gmail.send scope) — never the app owner's Gmail.
 
 import { z } from "zod";
 import { DELIVERABLE_LABEL } from "../lib/pricing";
 import { requireProPlan, requireVerifiedUser } from "../lib/auth";
+import {
+  getGmailProfileEmail,
+  isGmailAuthError,
+  sendGmailMessage,
+} from "../lib/gmail";
 import { chatGroqJson } from "../lib/groq";
 import {
   dbThrow,
@@ -297,5 +303,129 @@ export async function requestSendPitch(
       : "Saved as a draft and downloaded as an .eml — open it and send it from your own Gmail. Nothing is ever sent through the app owner's Gmail.",
     fromEmail: gmailEmail,
     draft: draftPayload,
+  };
+}
+
+export const sendPitchSchema = z.object({
+  userId: userIdArg,
+  accessToken: z.string().optional(),
+  dealId: z.number(),
+  gmailToken: z.string(),
+});
+
+/** One-click pitch send: delivers the saved pitch straight from the
+ *  creator's own Gmail via the Gmail API, using the Google access token
+ *  the client passes (granted at sign-in with the gmail.send scope).
+ *  The token is verified against the signed-in account before sending;
+ *  a 401/403 from Gmail becomes a "sign in again" status, never a
+ *  send from the wrong account. */
+export async function sendPitch(
+  ctx: ActionCtx,
+  args: z.infer<typeof sendPitchSchema>,
+): Promise<PitchDraft> {
+  const db = requireDb(ctx);
+  const verified = await requireVerifiedUser(ctx, args.userId, args.accessToken);
+  await requireProPlan(ctx, args.userId);
+  const { data, error } = await db
+    .from("deals")
+    .select("*")
+    .eq("id", args.dealId)
+    .eq("owner_id", args.userId)
+    .limit(1)
+    .maybeSingle();
+  dbThrow(error, "sendPitch deal");
+  const deal = (data ?? null) as DealRow | null;
+  if (!deal) throw new Error("Deal not found");
+  const noDraft = { fromEmail: null, draft: null };
+  if (!deal.pitch_subject || !deal.pitch_body) {
+    return {
+      status: "needs_pitch",
+      message: "Write the pitch first, then send it.",
+      ...noDraft,
+    };
+  }
+  if (!deal.brand_email) {
+    return {
+      status: "needs_email",
+      message:
+        "Add the brand's email on this deal first — the pitch needs a recipient.",
+      ...noDraft,
+    };
+  }
+  if (!args.gmailToken.trim()) {
+    return {
+      status: "gmail_not_connected",
+      message:
+        "Sign out and sign in again with Google to connect Gmail for one-click sending.",
+      ...noDraft,
+    };
+  }
+  // Verify the Gmail token belongs to the signed-in account before
+  // sending anything with it.
+  let gmailEmail: string;
+  try {
+    gmailEmail = await getGmailProfileEmail(args.gmailToken);
+  } catch (err) {
+    if (isGmailAuthError(err)) {
+      return {
+        status: "gmail_auth_failed",
+        message:
+          "Gmail permission expired or not granted — sign out and sign in again with Google, then try sending.",
+        fromEmail: verified.email,
+        draft: null,
+      };
+    }
+    throw err;
+  }
+  if (gmailEmail.toLowerCase() !== (verified.email ?? "").toLowerCase()) {
+    throw new Error(
+      "gmail_mismatch: the Gmail token does not match the signed-in account",
+    );
+  }
+  try {
+    await sendGmailMessage(args.gmailToken, {
+      to: deal.brand_email,
+      subject: deal.pitch_subject,
+      body: deal.pitch_body,
+    });
+  } catch (err) {
+    if (isGmailAuthError(err)) {
+      return {
+        status: "gmail_auth_failed",
+        message:
+          "Gmail permission expired or not granted — sign out and sign in again with Google, then try sending.",
+        fromEmail: verified.email,
+        draft: null,
+      };
+    }
+    throw err;
+  }
+  const { error: insertError } = await db.from("reminders").insert({
+    owner_id: args.userId,
+    from_email: verified.email,
+    deal_id: deal.id,
+    kind: "pitch",
+    to_email: deal.brand_email,
+    subject: deal.pitch_subject,
+    body: deal.pitch_body,
+    status: "sent",
+  });
+  dbThrow(insertError, "sendPitch insert");
+  const { error: updateError } = await db
+    .from("deals")
+    .update({
+      pitch_sent_at: new Date().toISOString(),
+      ...(deal.stage === "prospect" || deal.stage === "pitch_ready"
+        ? { stage: "pitched" }
+        : {}),
+    })
+    .eq("id", args.dealId)
+    .eq("owner_id", args.userId);
+  dbThrow(updateError, "sendPitch update");
+  return {
+    status: "sent",
+    message: `Pitch sent from your Gmail (${verified.email}) to ${deal.brand_email}.`,
+    fromEmail: verified.email,
+    draft: null,
   };
 }

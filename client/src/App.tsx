@@ -5,7 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import NumberFlow from "@number-flow/react";
 import { Toaster, toast } from "sonner";
 import { api, type ApiResponse } from "./api";
-import { getSupabaseClient, preloadSupabaseLibrary, resetSupabaseClient, DEFAULT_SUPABASE_URL } from "./supabase";
+import { getGoogleProviderToken, getSupabaseClient, preloadSupabaseLibrary, resetSupabaseClient, DEFAULT_SUPABASE_URL } from "./supabase";
 
 type Dash = ApiResponse<typeof api, "getDashboard">;
 type Deal = Dash["deals"][number];
@@ -1048,7 +1048,14 @@ function SignInSheet({ open, onClose, supabaseUrl, supabaseAnonKey, configured, 
     }
     try {
       const client = await getSupabaseClient(supabaseUrl, supabaseAnonKey);
-      const { error: err } = await client.auth.signInWithOAuth({ provider: "google", options: { redirectTo: appRedirectUrl() } });
+      const { error: err } = await client.auth.signInWithOAuth({
+        provider: "google",
+        options: {
+          redirectTo: appRedirectUrl(),
+          scopes: "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/gmail.send",
+          queryParams: { access_type: "offline", prompt: "consent" },
+        },
+      });
       if (err) throw err;
     } catch (err: any) {
       setError(err?.message ?? "Could not start Google sign-in. Try again.");
@@ -2558,7 +2565,7 @@ function DealCard({ deal, data, userId, accessToken, invalidate, goInvoices, ind
   const [email, setEmail] = useState(deal.brandEmail ?? "");
   const [price, setPrice] = useState(deal.agreedPrice != null ? String(deal.agreedPrice) : "");
   const [sendMsg, setSendMsg] = useState("");
-  const [lastDraft, setLastDraft] = useState<{ toEmail: string; subject: string; body: string } | null>(null);
+  const [pitchFallback, setPitchFallback] = useState(false);
   const [pitchOpen, setPitchOpen] = useState(false);
 
   const genMut = useMutation({
@@ -2566,12 +2573,53 @@ function DealCard({ deal, data, userId, accessToken, invalidate, goInvoices, ind
     onSuccess: (r) => { setSubject(r.subject); setBody(r.body); setPitchOpen(true); invalidate(); toast.success("Pitch written — review it below"); },
     onError: () => toast.error("Could not write the pitch. Try again."),
   });
+  // One-click send: delivers the pitch straight from the creator's own
+  // Gmail. Edits are saved first so the sent pitch matches the screen.
+  const sendMut = useMutation({
+    mutationFn: async () => {
+      if (subject.trim() && body.trim()) {
+        await api.savePitch({ userId, accessToken, dealId: deal.id, subject, body });
+      }
+      const token = await getGoogleProviderToken();
+      if (!token) {
+        return {
+          status: "gmail_not_connected",
+          message: "Sign out and sign in again with Google to connect Gmail for one-click sending — or download the draft below.",
+          fromEmail: null,
+          draft: null,
+        };
+      }
+      return api.sendPitch({ userId, accessToken, dealId: deal.id, gmailToken: token });
+    },
+    onSuccess: (r) => {
+      if (r.status === "sent") {
+        setSendMsg(r.message);
+        toast.success("Pitch sent from your Gmail");
+        invalidate();
+      } else if (r.status === "needs_pitch" || r.status === "needs_email") {
+        setSendMsg(r.message);
+        toast.error(r.message);
+      } else if (r.status === "gmail_not_connected" || r.status === "gmail_auth_failed") {
+        setSendMsg(r.message);
+        toast.error(r.message);
+        setPitchFallback(true);
+      } else {
+        setSendMsg(r.message);
+      }
+    },
+    onError: () => {
+      setSendMsg("Could not send. Try again, or download the draft.");
+      toast.error("Could not send. Try again, or download the draft.");
+      setPitchFallback(true);
+    },
+  });
+  // Fallback only: the .eml download path. One-click send (sendMut) is
+  // the main path now.
   const draftMut = useMutation({
     mutationFn: () => api.requestSendPitch({ userId, accessToken, dealId: deal.id }),
     onSuccess: (r) => {
       setSendMsg(r.message);
       if (r.draft) {
-        setLastDraft(r.draft);
         downloadTextFile(`pitch-${deal.brandName.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.eml`, emlFor(r.draft, r.fromEmail));
         toast.success("Pitch draft saved & downloaded — send it from your Gmail");
       }
@@ -2678,20 +2726,17 @@ function DealCard({ deal, data, userId, accessToken, invalidate, goInvoices, ind
             >
               Save edits
             </button>
-            <button type="button" className={btnPrimary} disabled={draftMut.isPending} onClick={() => draftMut.mutate()}>
-              {draftMut.isPending ? "Preparing…" : "Send pitch"}
+            <button type="button" className={btnPrimary} disabled={sendMut.isPending} onClick={() => sendMut.mutate()}>
+              {sendMut.isPending ? "Sending…" : "Send pitch"}
             </button>
-            {lastDraft && (
-              <button
-                type="button" className={btnGhost}
-                onClick={() => downloadTextFile(`pitch-${deal.brandName.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.eml`, emlFor(lastDraft, data.senderEmail))}
-              >
-                Download draft again
+            {pitchFallback && (
+              <button type="button" className={btnGhost} disabled={draftMut.isPending} onClick={() => draftMut.mutate()}>
+                {draftMut.isPending ? "Preparing…" : "Download draft (.eml)"}
               </button>
             )}
           </div>
           <p className="text-xs text-[var(--dim)]">
-            Send saves a ready-to-send draft from your Gmail — open the .eml and hit send. Nothing goes through anyone else's account.
+            Send delivers it straight from your Gmail in one tap. Nothing goes through anyone else's account.
           </p>
         </motion.div>
       )}
@@ -2740,10 +2785,48 @@ function InvoiceCard({ inv, data, userId, accessToken, invalidate, index = 0 }: 
   const reduce = useReducedMotion();
   const [msg, setMsg] = useState("");
   const [lastDraft, setLastDraft] = useState<{ toEmail: string; subject: string; body: string } | null>(null);
+  const [remFallback, setRemFallback] = useState(false);
   const overdue = inv.daysOverdue > 0 && inv.status !== "paid";
   const statusColor =
     inv.status === "paid" ? "text-[var(--accent)]" : overdue ? "text-[var(--danger)]" : "text-[var(--dim)]";
-  const remMut = useMutation({
+  // One-click reminder: delivers it straight from the creator's own Gmail.
+  const remSendMut = useMutation({
+    mutationFn: async () => {
+      const token = await getGoogleProviderToken();
+      if (!token) {
+        return {
+          status: "gmail_not_connected",
+          message: "Sign out and sign in again with Google to connect Gmail for one-click sending — or download the reminder draft below.",
+          fromEmail: null,
+          draft: null,
+        };
+      }
+      return api.sendInvoiceReminder({ userId, accessToken, invoiceId: inv.id, gmailToken: token });
+    },
+    onSuccess: (r) => {
+      if (r.status === "sent") {
+        setMsg(r.message);
+        toast.success("Reminder sent from your Gmail");
+        invalidate();
+      } else if (r.status === "needs_email") {
+        setMsg(r.message);
+        toast.error(r.message);
+      } else if (r.status === "gmail_not_connected" || r.status === "gmail_auth_failed") {
+        setMsg(r.message);
+        toast.error(r.message);
+        setRemFallback(true);
+      } else {
+        setMsg(r.message);
+      }
+    },
+    onError: () => {
+      setMsg("Could not send the reminder. Try again, or download the draft.");
+      toast.error("Could not send the reminder. Try again, or download the draft.");
+      setRemFallback(true);
+    },
+  });
+  // Fallback only: the .eml reminder draft. One-click send is the main path now.
+  const remDraftMut = useMutation({
     mutationFn: () => api.requestInvoiceReminder({ userId, accessToken, invoiceId: inv.id }),
     onSuccess: (r) => {
       setMsg(r.message);
@@ -2755,6 +2838,41 @@ function InvoiceCard({ inv, data, userId, accessToken, invalidate, index = 0 }: 
       invalidate();
     },
     onError: () => { setMsg("Could not queue the reminder. Try again."); toast.error("Could not queue the reminder. Try again."); },
+  });
+  // One-click invoice send: emails the invoice straight from the
+  // creator's own Gmail and marks it sent.
+  const invSendMut = useMutation({
+    mutationFn: async () => {
+      const token = await getGoogleProviderToken();
+      if (!token) {
+        return {
+          status: "gmail_not_connected",
+          message: "Sign out and sign in again with Google to connect Gmail for one-click sending — or download the invoice below.",
+          fromEmail: null,
+          draft: null,
+        };
+      }
+      return api.sendInvoice({ userId, accessToken, invoiceId: inv.id, gmailToken: token });
+    },
+    onSuccess: (r) => {
+      if (r.status === "sent") {
+        setMsg(r.message);
+        toast.success("Invoice sent from your Gmail");
+        invalidate();
+      } else if (r.status === "needs_email") {
+        setMsg(r.message);
+        toast.error(r.message);
+      } else if (r.status === "gmail_not_connected" || r.status === "gmail_auth_failed") {
+        setMsg(r.message);
+        toast.error(r.message);
+      } else {
+        setMsg(r.message);
+      }
+    },
+    onError: () => {
+      setMsg("Could not send the invoice. Try again, or download it below.");
+      toast.error("Could not send the invoice. Try again, or download it below.");
+    },
   });
   return (
     <motion.li {...itemAnim(index, reduce)} className="card overflow-hidden">
@@ -2782,13 +2900,23 @@ function InvoiceCard({ inv, data, userId, accessToken, invalidate, index = 0 }: 
       <div className="px-5 pt-3"><SendsFrom data={data} /></div>
       <div className="flex flex-wrap gap-2 p-4">
         {inv.status === "draft" && (
-          <button type="button" className={btnPrimary} onClick={() => api.updateInvoiceStatus({ userId, accessToken, id: inv.id, status: "sent" }).then(invalidate)}>Mark as sent</button>
+          <>
+            <button type="button" className={btnPrimary} onClick={() => api.updateInvoiceStatus({ userId, accessToken, id: inv.id, status: "sent" }).then(invalidate)}>Mark as sent</button>
+            <button type="button" className={btnPrimary} disabled={invSendMut.isPending} onClick={() => invSendMut.mutate()}>
+              {invSendMut.isPending ? "Sending…" : "Send invoice"}
+            </button>
+          </>
         )}
         {inv.status !== "paid" && (
           <>
-            <button type="button" className={btnGhost} disabled={remMut.isPending} onClick={() => remMut.mutate()}>
-              {remMut.isPending ? "Preparing…" : "Send payment reminder"}
+            <button type="button" className={btnGhost} disabled={remSendMut.isPending} onClick={() => remSendMut.mutate()}>
+              {remSendMut.isPending ? "Sending…" : "Send payment reminder"}
             </button>
+            {remFallback && (
+              <button type="button" className={btnGhost} disabled={remDraftMut.isPending} onClick={() => remDraftMut.mutate()}>
+                {remDraftMut.isPending ? "Preparing…" : "Download reminder (.eml)"}
+              </button>
+            )}
             <button type="button" className={btnGhost} onClick={() => downloadTextFile(`invoice-${inv.invoiceNumber}.txt`, invoiceText(inv, data.senderEmail))}>
               Download invoice
             </button>

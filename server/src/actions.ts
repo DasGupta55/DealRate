@@ -14,6 +14,8 @@
 // That leaves 28 public actions in `Actions`. Each entry has a matching
 // zod schema in `ActionSchemas` (same key); the router validates the
 // request body against the schema before calling the handler.
+// Plus 3 one-click Gmail send actions (sendPitch, sendInvoice,
+// sendInvoiceReminder), added later — 31 public actions total.
 
 import { z } from "zod";
 import type { ActionCtx } from "./lib/db";
@@ -50,6 +52,8 @@ import {
   requestSendPitchSchema,
   savePitch,
   savePitchSchema,
+  sendPitch,
+  sendPitchSchema,
   updateDeal,
   updateDealSchema,
 } from "./actions/deals";
@@ -62,6 +66,10 @@ import {
   deleteInvoiceSchema,
   requestInvoiceReminder,
   requestInvoiceReminderSchema,
+  sendInvoice,
+  sendInvoiceReminder,
+  sendInvoiceReminderSchema,
+  sendInvoiceSchema,
   updateInvoiceStatus,
   updateInvoiceStatusSchema,
 } from "./actions/invoices";
@@ -118,10 +126,13 @@ export const Actions: Record<string, ActionHandler> = {
   generatePitch: asHandler(generatePitch),
   savePitch: asHandler(savePitch),
   requestSendPitch: asHandler(requestSendPitch),
+  sendPitch: asHandler(sendPitch),
   createInvoice: asHandler(createInvoice),
   updateInvoiceStatus: asHandler(updateInvoiceStatus),
   deleteInvoice: asHandler(deleteInvoice),
   requestInvoiceReminder: asHandler(requestInvoiceReminder),
+  sendInvoiceReminder: asHandler(sendInvoiceReminder),
+  sendInvoice: asHandler(sendInvoice),
   checkOverdueInvoices: asHandler(checkOverdueInvoices),
   getProCheckoutInfo: asHandler(getProCheckoutInfo),
   createProOrder: asHandler(createProOrder),
@@ -154,10 +165,13 @@ export type ActionHandlers = {
   generatePitch: typeof generatePitch;
   savePitch: typeof savePitch;
   requestSendPitch: typeof requestSendPitch;
+  sendPitch: typeof sendPitch;
   createInvoice: typeof createInvoice;
   updateInvoiceStatus: typeof updateInvoiceStatus;
   deleteInvoice: typeof deleteInvoice;
   requestInvoiceReminder: typeof requestInvoiceReminder;
+  sendInvoiceReminder: typeof sendInvoiceReminder;
+  sendInvoice: typeof sendInvoice;
   checkOverdueInvoices: typeof checkOverdueInvoices;
   getProCheckoutInfo: typeof getProCheckoutInfo;
   createProOrder: typeof createProOrder;
@@ -185,10 +199,13 @@ export const ActionSchemas: Record<string, z.ZodTypeAny> = {
   generatePitch: generatePitchSchema,
   savePitch: savePitchSchema,
   requestSendPitch: requestSendPitchSchema,
+  sendPitch: sendPitchSchema,
   createInvoice: createInvoiceSchema,
   updateInvoiceStatus: updateInvoiceStatusSchema,
   deleteInvoice: deleteInvoiceSchema,
   requestInvoiceReminder: requestInvoiceReminderSchema,
+  sendInvoiceReminder: sendInvoiceReminderSchema,
+  sendInvoice: sendInvoiceSchema,
   checkOverdueInvoices: checkOverdueInvoicesSchema,
   getProCheckoutInfo: getProCheckoutInfoSchema,
   createProOrder: createProOrderSchema,

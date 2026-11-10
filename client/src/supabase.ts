@@ -50,6 +50,25 @@ export async function getCurrentAccessToken(): Promise<string | null> {
   }
 }
 
+// Google provider (OAuth) access token of the current Supabase session,
+// if the user signed in with Google and granted extra scopes
+// (gmail.send). Used for one-click Gmail sending: the token goes to the
+// server, which calls the Gmail API with it. Returns null when signed
+// out, when the session has no provider token (signed in before the
+// Gmail scope was requested), or when the refresh fails — the caller
+// then shows the re-sign-in message and the .eml fallback.
+export async function getGoogleProviderToken(): Promise<string | null> {
+  if (!cachedClient) return null;
+  try {
+    const { data } = await cachedClient.auth.getSession();
+    if (data.session?.provider_token) return data.session.provider_token;
+    const { data: refreshed } = await cachedClient.auth.refreshSession();
+    return refreshed.session?.provider_token ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // No-op now: @supabase/supabase-js is bundled with the app, so there is no
 // separate library download to warm up. Kept so existing callers (App.tsx)
 // need no change.
