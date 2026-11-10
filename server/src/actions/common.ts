@@ -82,6 +82,23 @@ export interface BrandOut {
   isSuggestion: boolean;
 }
 
+// AI Brand Research — one short, sourced finding per topic. A field is
+// null when no public evidence was found; the UI shows "Not found in
+// public sources" instead of inventing it.
+export interface BrandResearch {
+  website: string | null;
+  products: string | null;
+  marketing: string | null;
+  influencerCollaborations: string | null;
+  creatorProgram: string | null;
+  campaigns: string | null;
+  affiliate: string | null;
+  countryOpportunities: string | null;
+  contact: string | null;
+  sources: { title: string; url: string }[];
+  checkedAt: string;
+}
+
 export interface DealOut {
   id: number;
   brandName: string;
@@ -94,6 +111,8 @@ export interface DealOut {
   pitchBody: string | null;
   pitchSentAt: string | null;
   notes: string | null;
+  research: BrandResearch | null;
+  researchCheckedAt: string | null;
 }
 
 export interface InvoiceOut {
@@ -213,6 +232,15 @@ export function toBrandOut(r: BrandRow): BrandOut {
 }
 
 export function toDealOut(r: DealRow): DealOut {
+  let research: BrandResearch | null = null;
+  const raw = r.research_json as BrandResearch | string | null;
+  if (raw) {
+    try {
+      research = typeof raw === "string" ? (JSON.parse(raw) as BrandResearch) : raw;
+    } catch {
+      research = null;
+    }
+  }
   return {
     id: r.id,
     brandName: r.brand_name,
@@ -225,6 +253,8 @@ export function toDealOut(r: DealRow): DealOut {
     pitchBody: r.pitch_body,
     pitchSentAt: iso(r.pitch_sent_at),
     notes: r.notes,
+    research,
+    researchCheckedAt: iso(r.research_checked_at),
   };
 }
 

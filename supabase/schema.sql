@@ -116,6 +116,8 @@ create table deals (
   pitch_body text,
   pitch_sent_at timestamptz,
   notes text,
+  research_json jsonb,
+  research_checked_at timestamptz,
   created_at timestamptz not null default now()
 );
 

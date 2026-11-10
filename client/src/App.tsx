@@ -1309,6 +1309,9 @@ export function App() {
      before anything else — the pages must be reachable with no
      login and no tapping through the app. */
   const [tab, setTab] = useState<"price" | "brands" | "deals" | "invoices" | "plan" | "account" | "owner" | "legal">(() => (infoPageFromHash() ? "legal" : "price"));
+  // The deal just added from Brand Finder, so its AI Brand Research
+  // starts automatically once the Deals tab renders it.
+  const [autoResearchDealId, setAutoResearchDealId] = useState<number | null>(null);
   /* Where "Back" on a public info page returns to — the page the
      reader came from (Plan, Account, or wherever the footer was). */
   const [legalReturn, setLegalReturn] = useState<"price" | "brands" | "deals" | "invoices" | "plan" | "account" | "owner">("plan");
@@ -1785,7 +1788,7 @@ export function App() {
             <SkeletonCard lines={2} />
           </div>
         ) : data && canUsePro ? (
-          <BrandsTab data={data} userId={userId ?? ""} accessToken={accessToken ?? undefined} invalidate={invalidate} goDeals={() => setTab("deals")} />
+          <BrandsTab data={data} userId={userId ?? ""} accessToken={accessToken ?? undefined} invalidate={invalidate} goDeals={() => setTab("deals")} onDealAdded={setAutoResearchDealId} />
         ) : data ? (
           <LockedFeature
             title="Brands"
@@ -1807,7 +1810,7 @@ export function App() {
             <SkeletonCard lines={2} />
           </div>
         ) : data && canUsePro ? (
-          <DealsTab data={data} userId={userId ?? ""} accessToken={accessToken ?? undefined} invalidate={invalidate} goInvoices={() => setTab("invoices")} />
+          <DealsTab data={data} userId={userId ?? ""} accessToken={accessToken ?? undefined} invalidate={invalidate} goInvoices={() => setTab("invoices")} autoResearchDealId={autoResearchDealId} onAutoResearchDone={() => setAutoResearchDealId(null)} />
         ) : data ? (
           <LockedFeature
             title="Deals"
@@ -2413,7 +2416,7 @@ function PriceTab(props: {
 
 /* ---------------- Brands tab ---------------- */
 
-function BrandsTab({ data, userId, accessToken, invalidate, goDeals }: { data: Dash; userId: string; accessToken?: string; invalidate: () => void; goDeals: () => void }) {
+function BrandsTab({ data, userId, accessToken, invalidate, goDeals, onDealAdded }: { data: Dash; userId: string; accessToken?: string; invalidate: () => void; goDeals: () => void; onDealAdded?: (dealId: number) => void }) {
   const reduce = useReducedMotion();
   const [niche, setNiche] = useState("Tech");
   const [country, setCountry] = useState("India");
@@ -2437,6 +2440,7 @@ function BrandsTab({ data, userId, accessToken, invalidate, goDeals }: { data: D
     onSuccess: (r) => {
       invalidate();
       toast.success(r.created ? "Added to Deals — it's in your pipeline" : "Already in Deals — opening it");
+      onDealAdded?.(r.dealId);
       goDeals();
     },
     onError: () => toast.error("Could not add that deal. Try again."),
@@ -2579,7 +2583,109 @@ function BrandsTab({ data, userId, accessToken, invalidate, goDeals }: { data: D
 
 /* ---------------- Deals tab ---------------- */
 
-function DealCard({ deal, data, userId, accessToken, invalidate, goInvoices, index = 0 }: { deal: Deal; data: Dash; userId: string; accessToken?: string; invalidate: () => void; goInvoices: () => void; index?: number }) {
+/* ---------------- AI Brand Research ---------------- */
+
+function BrandResearchSection({ deal, userId, accessToken, invalidate, autoResearch, onAutoResearchDone }: { deal: Deal; userId: string; accessToken?: string; invalidate: () => void; autoResearch?: boolean; onAutoResearchDone?: () => void }) {
+  const reduce = useReducedMotion();
+  const [open, setOpen] = useState(false);
+  const startedRef = useRef(false);
+  const researchMut = useMutation({
+    mutationFn: (force: boolean) => api.researchBrand({ userId, accessToken, dealId: deal.id, force: force || undefined }),
+    onSuccess: () => { invalidate(); toast.success("Brand research ready"); },
+    onError: (e) => { toast.error(e instanceof Error ? e.message : "Could not research this brand. Try again."); },
+    onSettled: () => { onAutoResearchDone?.(); },
+  });
+  // Auto-start once when this brand was just added to Deals.
+  useEffect(() => {
+    if (autoResearch && !deal.research && !startedRef.current) {
+      startedRef.current = true;
+      setOpen(true);
+      researchMut.mutate(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoResearch]);
+  const r = deal.research;
+  const topics = r
+    ? [
+        { label: "Official website", value: r.website, link: true },
+        { label: "Products & services", value: r.products },
+        { label: "Marketing", value: r.marketing },
+        { label: "Influencer collaborations", value: r.influencerCollaborations },
+        { label: "Creator partnership program", value: r.creatorProgram },
+        { label: "Influencer campaigns", value: r.campaigns },
+        { label: "Affiliate opportunities", value: r.affiliate },
+        { label: "Country opportunities", value: r.countryOpportunities },
+        { label: "Business contact", value: r.contact },
+      ]
+    : [];
+  const found = topics.filter((t) => t.value);
+  const missing = topics.filter((t) => !t.value).map((t) => t.label);
+  const checked = deal.researchCheckedAt ? new Date(deal.researchCheckedAt).toLocaleDateString() : null;
+  return (
+    <div className="mt-4 space-y-3 border-t border-[var(--border)] pt-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <button type="button" className="text-left font-display text-base font-bold" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+          AI Brand Research {open ? "▾" : "▸"}
+        </button>
+        {r && checked && <span className="text-xs text-[var(--dim)]">Checked {checked}</span>}
+      </div>
+      {open && (
+        <motion.div initial={reduce ? { opacity: 0 } : { opacity: 0, y: 6 }} animate={reduce ? { opacity: 1 } : { opacity: 1, y: 0 }} transition={SPRING_UI} className="space-y-3">
+          {researchMut.isPending && (
+            <p className="inline-flex items-center gap-2 text-sm text-[var(--dim)]"><Spinner /> Researching {deal.brandName}… checking the official site and public sources.</p>
+          )}
+          {!researchMut.isPending && !r && (
+            <div className="space-y-2">
+              <p className="text-sm text-[var(--dim)]">AI checks the brand's official website, products, marketing, creator programs, campaigns, affiliate options and public contact details — only from public sources, with links.</p>
+              <button type="button" className={btnPrimary} disabled={researchMut.isPending} onClick={() => researchMut.mutate(false)}>
+                Research this brand
+              </button>
+            </div>
+          )}
+          {r && (
+            <>
+              {found.length === 0 && <p className="text-sm text-[var(--dim)]">No public information found for {deal.brandName} yet. Try refreshing later.</p>}
+              <dl className="space-y-3">
+                {found.map((t) => (
+                  <div key={t.label}>
+                    <dt className="text-xs font-bold uppercase tracking-wide text-[var(--dim)]">{t.label}</dt>
+                    <dd className="mt-0.5 text-sm [overflow-wrap:anywhere]">
+                      {t.link && t.value && /^https?:\/\//i.test(t.value) ? (
+                        <a href={t.value} target="_blank" rel="noreferrer" className="font-medium text-[var(--accent)] underline">{t.value}</a>
+                      ) : (
+                        t.value
+                      )}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+              {missing.length > 0 && (
+                <p className="text-xs text-[var(--dim)]">No public evidence found for: {missing.join(", ")}. Nothing was invented for these.</p>
+              )}
+              {r.sources.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-[var(--dim)]">Sources</p>
+                  <ul className="mt-1 space-y-1">
+                    {r.sources.map((s, i) => (
+                      <li key={`${s.url}-${i}`} className="text-sm">
+                        <a href={s.url} target="_blank" rel="noreferrer" className="font-medium text-[var(--accent)] underline [overflow-wrap:anywhere]">{s.title || s.url}</a>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              <button type="button" className={btnGhost} disabled={researchMut.isPending} onClick={() => researchMut.mutate(true)}>
+                {researchMut.isPending ? "Refreshing…" : "Refresh research"}
+              </button>
+            </>
+          )}
+        </motion.div>
+      )}
+    </div>
+  );
+}
+
+function DealCard({ deal, data, userId, accessToken, invalidate, goInvoices, index = 0, autoResearch, onAutoResearchDone }: { deal: Deal; data: Dash; userId: string; accessToken?: string; invalidate: () => void; goInvoices: () => void; index?: number; autoResearch?: boolean; onAutoResearchDone?: () => void }) {
   const reduce = useReducedMotion();
   const [subject, setSubject] = useState(deal.pitchSubject ?? "");
   const [body, setBody] = useState(deal.pitchBody ?? "");
@@ -2762,11 +2868,12 @@ function DealCard({ deal, data, userId, accessToken, invalidate, goInvoices, ind
         </motion.div>
       )}
       {sendMsg && <p className="mt-3 text-sm text-[var(--dim)]" role="status">{sendMsg}</p>}
+      <BrandResearchSection deal={deal} userId={userId} accessToken={accessToken} invalidate={invalidate} autoResearch={autoResearch} onAutoResearchDone={onAutoResearchDone} />
     </motion.li>
   );
 }
 
-function DealsTab({ data, userId, accessToken, invalidate, goInvoices }: { data: Dash; userId: string; accessToken?: string; invalidate: () => void; goInvoices: () => void }) {
+function DealsTab({ data, userId, accessToken, invalidate, goInvoices, autoResearchDealId, onAutoResearchDone }: { data: Dash; userId: string; accessToken?: string; invalidate: () => void; goInvoices: () => void; autoResearchDealId?: number | null; onAutoResearchDone?: () => void }) {
   const [brandName, setBrandName] = useState("");
   const addMut = useMutation({
     mutationFn: () => api.createDeal({ userId, accessToken, brandName: brandName.trim(), deliverable: "dedicated", agreedPrice: data.calculations[0]?.priceMid, currency: "USD" }),
@@ -2794,7 +2901,7 @@ function DealsTab({ data, userId, accessToken, invalidate, goInvoices }: { data:
       </section>
       {data.deals.length === 0 && <p className="text-sm text-[var(--dim)]">No deals yet. Start one from the Brands tab, or add a brand above.</p>}
       <ul className="space-y-4">
-        {data.deals.map((d, i) => <DealCard key={d.id} deal={d} data={data} userId={userId} accessToken={accessToken} invalidate={invalidate} goInvoices={goInvoices} index={i} />)}
+        {data.deals.map((d, i) => <DealCard key={d.id} deal={d} data={data} userId={userId} accessToken={accessToken} invalidate={invalidate} goInvoices={goInvoices} index={i} autoResearch={autoResearchDealId != null && d.id === autoResearchDealId} onAutoResearchDone={onAutoResearchDone} />)}
       </ul>
     </div>
   );

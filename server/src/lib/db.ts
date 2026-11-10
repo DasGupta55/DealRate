@@ -120,6 +120,8 @@ export interface DealRow {
   pitch_body: string | null;
   pitch_sent_at: string | null;
   notes: string | null;
+  research_json: unknown | null;
+  research_checked_at: string | null;
   created_at: string;
 }
 
