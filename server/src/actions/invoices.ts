@@ -15,7 +15,7 @@ import {
 import { forbidden } from "../lib/errors";
 import {
   getGoogleUserinfoEmail,
-  gmailAuthMessage,
+  gmailAuthResult,
   isGmailAuthError,
   sendGmailMessage,
 } from "../lib/gmail";
@@ -275,7 +275,7 @@ export async function sendInvoiceReminder(
     return {
       status: "gmail_not_connected",
       message:
-        "Sign out and sign in again with Google to connect Gmail for one-click sending.",
+        "Sign in with Google first, then tap Send again and allow Gmail sending.",
       ...noDraft,
     };
   }
@@ -285,8 +285,7 @@ export async function sendInvoiceReminder(
   } catch (err) {
     if (isGmailAuthError(err)) {
       return {
-        status: "gmail_auth_failed",
-        message: gmailAuthMessage(err),
+        ...gmailAuthResult(err),
         fromEmail: verified.email,
         draft: null,
       };
@@ -307,8 +306,7 @@ export async function sendInvoiceReminder(
   } catch (err) {
     if (isGmailAuthError(err)) {
       return {
-        status: "gmail_auth_failed",
-        message: gmailAuthMessage(err),
+        ...gmailAuthResult(err),
         fromEmail: verified.email,
         draft: null,
       };
@@ -391,7 +389,7 @@ export async function sendInvoice(
     return {
       status: "gmail_not_connected",
       message:
-        "Sign out and sign in again with Google to connect Gmail for one-click sending.",
+        "Sign in with Google first, then tap Send again and allow Gmail sending.",
       ...noDraft,
     };
   }
@@ -401,8 +399,7 @@ export async function sendInvoice(
   } catch (err) {
     if (isGmailAuthError(err)) {
       return {
-        status: "gmail_auth_failed",
-        message: gmailAuthMessage(err),
+        ...gmailAuthResult(err),
         fromEmail: verified.email,
         draft: null,
       };
@@ -423,8 +420,7 @@ export async function sendInvoice(
   } catch (err) {
     if (isGmailAuthError(err)) {
       return {
-        status: "gmail_auth_failed",
-        message: gmailAuthMessage(err),
+        ...gmailAuthResult(err),
         fromEmail: verified.email,
         draft: null,
       };

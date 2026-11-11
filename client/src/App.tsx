@@ -5,7 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import NumberFlow from "@number-flow/react";
 import { Toaster, toast } from "sonner";
 import { api, type ApiResponse } from "./api";
-import { getGoogleProviderToken, getSupabaseClient, preloadSupabaseLibrary, resetSupabaseClient, DEFAULT_SUPABASE_URL } from "./supabase";
+import { getGoogleProviderToken, getSupabaseClient, preloadSupabaseLibrary, requestGmailSendScope, resetSupabaseClient, DEFAULT_SUPABASE_URL } from "./supabase";
 
 type Dash = ApiResponse<typeof api, "getDashboard">;
 type Deal = Dash["deals"][number];
@@ -1220,7 +1220,11 @@ function SignInSheet({ open, onClose, supabaseUrl, supabaseAnonKey, configured, 
         provider: "google",
         options: {
           redirectTo: appRedirectUrl(),
-          scopes: "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/gmail.send",
+          // Basic profile scopes only — never gmail.send here. The
+          // email permission is granted incrementally, only when the
+          // creator taps Send, so sign-in never shows Google's
+          // unverified-app warning.
+          scopes: "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile",
           queryParams: { access_type: "offline", prompt: "consent" },
         },
       });
@@ -2854,6 +2858,32 @@ function BrandResearchSection({ deal, userId, accessToken, invalidate, autoResea
   );
 }
 
+/* Shown when a send failed only because the Gmail permission was
+   never granted. One tap re-runs Google sign-in asking for gmail.send
+   on top of the basic scopes, then returns to the app — the creator
+   taps Send again and it goes through. Google shows its
+   unverified-app warning on that consent screen (the app is not
+   verified yet); the panel says so plainly and what to tap. */
+function GmailGrantPanel() {
+  const [granting, setGranting] = useState(false);
+  return (
+    <div className="mt-3 rounded-2xl border border-[var(--amber)] bg-[var(--surface-alt)] px-4 py-3.5" role="alert">
+      <p className="text-sm font-bold">Allow Gmail sending to send this</p>
+      <p className="mt-1 text-sm leading-relaxed text-[var(--dim)]">
+        DealRate needs your permission to send email from your Gmail. Google will show a warning because the app is not verified yet — tap Advanced, then the “Go to … (unsafe)” link, then Continue. You will come back here; tap Send again and it goes through.
+      </p>
+      <button
+        type="button"
+        className={btnPrimary + " mt-3"}
+        disabled={granting}
+        onClick={async () => { setGranting(true); await requestGmailSendScope(); }}
+      >
+        {granting ? "Opening Google…" : "Allow Gmail sending"}
+      </button>
+    </div>
+  );
+}
+
 function DealCard({ deal, data, userId, accessToken, invalidate, goInvoices, index = 0, autoResearch, onAutoResearchDone }: { deal: Deal; data: Dash; userId: string; accessToken?: string; invalidate: () => void; goInvoices: () => void; index?: number; autoResearch?: boolean; onAutoResearchDone?: () => void }) {
   const reduce = useReducedMotion();
   const [subject, setSubject] = useState(deal.pitchSubject ?? "");
@@ -2863,6 +2893,9 @@ function DealCard({ deal, data, userId, accessToken, invalidate, goInvoices, ind
   const [sendMsg, setSendMsg] = useState("");
   const [pitchFallback, setPitchFallback] = useState(false);
   const [pitchOpen, setPitchOpen] = useState(false);
+  // True when the send failed only because the Gmail permission was
+  // never granted — the panel below offers the one-tap grant.
+  const [needsGmailGrant, setNeedsGmailGrant] = useState(false);
 
   const genMut = useMutation({
     mutationFn: () => api.generatePitch({ userId, accessToken, dealId: deal.id }),
@@ -2871,6 +2904,8 @@ function DealCard({ deal, data, userId, accessToken, invalidate, goInvoices, ind
   });
   // One-click send: delivers the pitch straight from the creator's own
   // Gmail. Edits are saved first so the sent pitch matches the screen.
+  // The Gmail permission is granted on demand (see the grant panel
+  // below) — sign-in never asks for it.
   const sendMut = useMutation({
     mutationFn: async () => {
       if (subject.trim() && body.trim()) {
@@ -2880,7 +2915,7 @@ function DealCard({ deal, data, userId, accessToken, invalidate, goInvoices, ind
       if (!token) {
         return {
           status: "gmail_not_connected",
-          message: "Sign out and sign in again with Google to connect Gmail for one-click sending — or download the draft below.",
+          message: "Sign in with Google first, then tap Send again and allow Gmail sending — or download the draft below.",
           fromEmail: null,
           draft: null,
         };
@@ -2890,11 +2925,16 @@ function DealCard({ deal, data, userId, accessToken, invalidate, goInvoices, ind
     onSuccess: (r) => {
       if (r.status === "sent") {
         setSendMsg(r.message);
+        setNeedsGmailGrant(false);
         toast.success("Pitch sent from your Gmail");
         invalidate();
       } else if (r.status === "needs_pitch" || r.status === "needs_email") {
         setSendMsg(r.message);
         toast.error(r.message);
+      } else if (r.status === "gmail_scope_missing") {
+        setSendMsg(r.message);
+        setNeedsGmailGrant(true);
+        setPitchFallback(true);
       } else if (r.status === "gmail_not_connected" || r.status === "gmail_auth_failed") {
         setSendMsg(r.message);
         toast.error(r.message);
@@ -3037,6 +3077,7 @@ function DealCard({ deal, data, userId, accessToken, invalidate, goInvoices, ind
         </motion.div>
       )}
       {sendMsg && <p className="mt-3 text-sm text-[var(--dim)]" role="status">{sendMsg}</p>}
+      {needsGmailGrant && <GmailGrantPanel />}
       <BrandResearchSection deal={deal} userId={userId} accessToken={accessToken} invalidate={invalidate} autoResearch={autoResearch} onAutoResearchDone={onAutoResearchDone} />
     </motion.li>
   );
@@ -3296,6 +3337,9 @@ function InvoiceCard({ inv, data, userId, accessToken, invalidate, index = 0 }: 
   const [previewOpen, setPreviewOpen] = useState(false);
   const [lastDraft, setLastDraft] = useState<{ toEmail: string; subject: string; body: string } | null>(null);
   const [remFallback, setRemFallback] = useState(false);
+  // True when a send failed only because the Gmail permission was
+  // never granted — the panel below offers the one-tap grant.
+  const [needsGmailGrant, setNeedsGmailGrant] = useState(false);
   const overdue = inv.daysOverdue > 0 && inv.status !== "paid";
   const statusColor =
     inv.status === "paid" ? "text-[var(--accent)]" : overdue ? "text-[var(--danger)]" : "text-[var(--dim)]";
@@ -3306,7 +3350,7 @@ function InvoiceCard({ inv, data, userId, accessToken, invalidate, index = 0 }: 
       if (!token) {
         return {
           status: "gmail_not_connected",
-          message: "Sign out and sign in again with Google to connect Gmail for one-click sending — or download the reminder draft below.",
+          message: "Sign in with Google first, then tap Send again and allow Gmail sending — or download the reminder draft below.",
           fromEmail: null,
           draft: null,
         };
@@ -3316,11 +3360,16 @@ function InvoiceCard({ inv, data, userId, accessToken, invalidate, index = 0 }: 
     onSuccess: (r) => {
       if (r.status === "sent") {
         setMsg(r.message);
+        setNeedsGmailGrant(false);
         toast.success("Reminder sent from your Gmail");
         invalidate();
       } else if (r.status === "needs_email") {
         setMsg(r.message);
         toast.error(r.message);
+      } else if (r.status === "gmail_scope_missing") {
+        setMsg(r.message);
+        setNeedsGmailGrant(true);
+        setRemFallback(true);
       } else if (r.status === "gmail_not_connected" || r.status === "gmail_auth_failed") {
         setMsg(r.message);
         toast.error(r.message);
@@ -3357,7 +3406,7 @@ function InvoiceCard({ inv, data, userId, accessToken, invalidate, index = 0 }: 
       if (!token) {
         return {
           status: "gmail_not_connected",
-          message: "Sign out and sign in again with Google to connect Gmail for one-click sending — or download the invoice below.",
+          message: "Sign in with Google first, then tap Send again and allow Gmail sending — or download the invoice below.",
           fromEmail: null,
           draft: null,
         };
@@ -3367,11 +3416,15 @@ function InvoiceCard({ inv, data, userId, accessToken, invalidate, index = 0 }: 
     onSuccess: (r) => {
       if (r.status === "sent") {
         setMsg(r.message);
+        setNeedsGmailGrant(false);
         toast.success("Invoice sent from your Gmail");
         invalidate();
       } else if (r.status === "needs_email") {
         setMsg(r.message);
         toast.error(r.message);
+      } else if (r.status === "gmail_scope_missing") {
+        setMsg(r.message);
+        setNeedsGmailGrant(true);
       } else if (r.status === "gmail_not_connected" || r.status === "gmail_auth_failed") {
         setMsg(r.message);
         toast.error(r.message);
@@ -3443,6 +3496,9 @@ function InvoiceCard({ inv, data, userId, accessToken, invalidate, index = 0 }: 
         <p className="px-4 pb-2 text-xs text-[var(--dim)]">Reminder downloaded as a draft — open it and send it from your Gmail.</p>
       )}
       {msg && <p className="px-4 pb-4 text-sm text-[var(--dim)]" role="status">{msg}</p>}
+      {needsGmailGrant && (
+        <div className="px-4 pb-4"><GmailGrantPanel /></div>
+      )}
       <InvoicePreview inv={inv} fromEmail={data.senderEmail} open={previewOpen} onClose={() => setPreviewOpen(false)} />
     </motion.li>
   );

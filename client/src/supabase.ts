@@ -69,6 +69,25 @@ export async function getGoogleProviderToken(): Promise<string | null> {
   }
 }
 
+/** Incremental Gmail permission: re-runs Google sign-in asking for the
+ *  gmail.send scope on top of the basic profile scopes. Sign-in itself
+ *  never asks for it, so the unverified-app warning never appears at
+ *  sign-in — it appears here, only when the creator taps Send and
+ *  chooses to allow it. Redirects to Google and back to the app; the
+ *  new session's provider_token then carries gmail.send. */
+export async function requestGmailSendScope(): Promise<void> {
+  if (!cachedClient) return;
+  const redirectTo = `${window.location.origin}${window.location.pathname}`;
+  await cachedClient.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo,
+      scopes: "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/gmail.send",
+      queryParams: { access_type: "offline", prompt: "consent" },
+    },
+  });
+}
+
 // No-op now: @supabase/supabase-js is bundled with the app, so there is no
 // separate library download to warm up. Kept so existing callers (App.tsx)
 // need no change.

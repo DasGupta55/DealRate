@@ -9,7 +9,7 @@ import { DELIVERABLE_LABEL } from "../lib/pricing";
 import { requireProPlan, requireVerifiedUser } from "../lib/auth";
 import {
   getGoogleUserinfoEmail,
-  gmailAuthMessage,
+  gmailAuthResult,
   isGmailAuthError,
   sendGmailMessage,
 } from "../lib/gmail";
@@ -483,10 +483,12 @@ export const sendPitchSchema = z.object({
 
 /** One-click pitch send: delivers the saved pitch straight from the
  *  creator's own Gmail via the Gmail API, using the Google access token
- *  the client passes (granted at sign-in with the gmail.send scope).
+ *  the client passes (granted on demand with the gmail.send scope when
+ *  the creator taps Send — sign-in itself never asks for it).
  *  The token is verified against the signed-in account before sending;
- *  a 401/403 from Gmail becomes a "sign in again" status, never a
- *  send from the wrong account. */
+ *  a 401/403 from Gmail becomes a "sign in again" status, and a token
+ *  without the scope becomes gmail_scope_missing, never a send from
+ *  the wrong account. */
 export async function sendPitch(
   ctx: ActionCtx,
   args: z.infer<typeof sendPitchSchema>,
@@ -524,7 +526,7 @@ export async function sendPitch(
     return {
       status: "gmail_not_connected",
       message:
-        "Sign out and sign in again with Google to connect Gmail for one-click sending.",
+        "Sign in with Google first, then tap Send again and allow Gmail sending.",
       ...noDraft,
     };
   }
@@ -536,8 +538,7 @@ export async function sendPitch(
   } catch (err) {
     if (isGmailAuthError(err)) {
       return {
-        status: "gmail_auth_failed",
-        message: gmailAuthMessage(err),
+        ...gmailAuthResult(err),
         fromEmail: verified.email,
         draft: null,
       };
@@ -558,8 +559,7 @@ export async function sendPitch(
   } catch (err) {
     if (isGmailAuthError(err)) {
       return {
-        status: "gmail_auth_failed",
-        message: gmailAuthMessage(err),
+        ...gmailAuthResult(err),
         fromEmail: verified.email,
         draft: null,
       };

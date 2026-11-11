@@ -1,12 +1,18 @@
 // Gmail API send — one-click sending from the creator's own Gmail.
 //
-// The creator signs in with Google via Supabase and grants the
-// gmail.send scope, so the Supabase session carries a Google access
-// token (provider_token). The client passes that token to the server on
-// send; the server calls the Gmail API with it. No new env vars, no
-// stored tokens: the token is only ever used to send the exact email
-// the signed-in creator requested, to the brand on their own
-// deal/invoice.
+// The creator signs in with Google via Supabase using only the basic
+// profile scopes (openid / email / profile), so sign-in never shows
+// the unverified-app warning. The gmail.send scope is granted
+// incrementally, only when the creator taps Send: the client re-runs
+// Google sign-in asking for gmail.send on top, and the Supabase
+// session then carries a Google access token (provider_token) with
+// that scope. The client passes that token to the server on send; the
+// server calls the Gmail API with it. No new env vars, no stored
+// tokens: the token is only ever used to send the exact email the
+// signed-in creator requested, to the brand on their own
+// deal/invoice. A token without the scope gets the distinct
+// gmail_scope_missing status (see gmailAuthResult) so the client can
+// offer the one-tap grant button instead of a generic re-sign-in.
 //
 // Headers MUST include a browser User-Agent (plus Accept) or Google's
 // API front door can reject the request the same way Groq did (403
@@ -38,6 +44,17 @@ export function isGmailAuthError(err: unknown): boolean {
     err instanceof Error &&
     (err.message.startsWith("gmail_401") ||
       err.message.startsWith("gmail_403"))
+  );
+}
+
+/** True when Google refused because the token does not carry the
+ *  gmail.send scope ("insufficient authentication scopes"). This is
+ *  the normal state before the creator grants email permission on
+ *  demand — not an expired token and not a broken sign-in. */
+export function isGmailScopeError(err: unknown): boolean {
+  return (
+    err instanceof Error &&
+    /insufficient authentication scopes|insufficient.*scope/i.test(err.message)
   );
 }
 
@@ -122,9 +139,22 @@ export function gmailAuthMessage(err: unknown): string {
     return "Gmail API is not switched on for this Google project — enable it in Google Cloud Console (APIs & Services → Library → Gmail API), then try sending again.";
   }
   if (/insufficient authentication scopes|insufficient.*scope/i.test(text)) {
-    return "Gmail send permission was not granted — sign out and sign in again with Google, making sure to tap Continue on the permission screen, then try sending.";
+    return "Email permission not granted yet — tap 'Allow Gmail sending' to let DealRate send from your Gmail, then tap Send again.";
   }
   return "Gmail permission expired or not granted — sign out and sign in again with Google, then try sending.";
+}
+
+/** Map a Gmail auth failure to the send-result status + message. A
+ *  missing gmail.send scope gets its own status so the client can
+ *  offer the one-tap grant button instead of a generic re-sign-in. */
+export function gmailAuthResult(err: unknown): { status: string; message: string } {
+  if (isGmailScopeError(err)) {
+    return {
+      status: "gmail_scope_missing",
+      message: "Email permission not granted yet — tap 'Allow Gmail sending' below to let DealRate send from your Gmail, then tap Send again.",
+    };
+  }
+  return { status: "gmail_auth_failed", message: gmailAuthMessage(err) };
 }
 
 /** The Google account email the access token belongs to, via the
