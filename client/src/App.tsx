@@ -2718,7 +2718,20 @@ function BrandsTab({ data, userId, accessToken, invalidate, goDeals, onDealAdded
 
   const discoverMut = useMutation({
     mutationFn: () => api.discoverBrands({ userId, accessToken, niche, country }),
-    onSuccess: (r) => { setMsg(r.message); invalidate(); if (r.found > 0) toast.success(`Found ${r.found} brand suggestion${r.found === 1 ? "" : "s"} to review`); },
+    onSuccess: (r) => {
+      setMsg(r.message);
+      invalidate();
+      if (r.found > 0) {
+        toast.success(`Found ${r.found} brand suggestion${r.found === 1 ? "" : "s"} to review`);
+        // Fill in contact emails as a second, separate call. The
+        // search itself has to stay fast (Netlify kills slow calls
+        // with a 504), so the email lookup runs after it and the list
+        // refreshes when the emails land a few seconds later.
+        api.enrichBrandEmails({ userId, accessToken, niche, country })
+          .then(() => invalidate())
+          .catch(() => { /* brands still show, just without emails */ });
+      }
+    },
     onError: (e) => { const m = e instanceof Error && e.message ? e.message : "Brand search failed. Check your connection and try again."; setMsg(m); toast.error(m); },
   });
   const addMut = useMutation({

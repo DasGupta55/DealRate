@@ -57,40 +57,13 @@ export async function discoverBrands(
   }
 
   const { discovery } = await discoverSponsorshipBrands(ctx.env, niche, country);
-  // Find each brand's contact email NOW, at discovery time — not
-  // only later in the research step. A brand whose email is blank
-  // when the creator sees it is a brand they have to look up by
-  // hand, which defeats the point of the Finder. The lookups run in
-  // parallel (bounded by the slowest brand, ~10s) and a failure for
-  // one brand never blocks the others or the search itself.
-  const contactByBrand = new Map<string, string>();
-  const contactPageByBrand = new Map<string, string>();
-  await Promise.allSettled(
-    discovery.brands.map(async (s) => {
-      const website = (s.website ?? "").trim() || null;
-      if (!website) return;
-      try {
-        const found = await Promise.race([
-          discoverBrandEmails({
-            brandName: s.name,
-            website,
-            candidatePages: [],
-          }),
-          new Promise<null>((resolve) =>
-            setTimeout(() => resolve(null), 12_000),
-          ),
-        ]);
-        if (!found) return;
-        const best = bestContact(found.contacts);
-        if (best) contactByBrand.set(s.name.toLowerCase(), best.email);
-        if (found.contactPageUrl) {
-          contactPageByBrand.set(s.name.toLowerCase(), found.contactPageUrl);
-        }
-      } catch {
-        /* no contact found for this brand — leave it blank */
-      }
-    }),
-  );
+  // NOTE: contact emails are NOT looked up here. Fetching each
+  // brand's contact pages adds up to ~10s on top of the web search +
+  // AI distillation, and the combined call then exceeds Netlify's
+  // function time limit and fails with a 504. The brands are saved
+  // first (email blank), the search returns fast, and the client
+  // immediately calls enrichBrandEmails as a second call to fill the
+  // emails in — they land on the cards a few seconds later.
   const { data: existingData, error: existingError } = await db
     .from("brands")
     .select("*")
@@ -113,7 +86,7 @@ export async function discoverBrands(
       owner_id: args.userId,
       name: s.name.trim(),
       website,
-      contact_email: contactByBrand.get(s.name.toLowerCase()) ?? null,
+      contact_email: null, // filled in by enrichBrandEmails, right after the search
       niche,
       notes: s.why,
       source_url: s.sourceUrl,
@@ -129,7 +102,7 @@ export async function discoverBrands(
         evidenceDate: s.evidenceDate,
         evidenceUrl: s.evidenceUrl,
         partnershipUrl: s.partnershipUrl,
-        contactPageUrl: contactPageByBrand.get(s.name.toLowerCase()) ?? null,
+        contactPageUrl: null, // filled in by enrichBrandEmails, right after the search
       },
     });
     dbThrow(error, "discoverBrands insert");
@@ -162,6 +135,82 @@ export async function discoverBrands(
         ? `Added ${added} brand suggestion${added === 1 ? "" : "s"}${agenciesAdded > 0 ? ` and ${agenciesAdded} ${agenciesAdded === 1 ? "agency" : "agencies"}` : ""}. Review them below — verified paid brands are listed first.`
         : "No brands with clear paid sponsorship evidence found for that search. Try a broader niche word.",
   };
+}
+
+export const enrichBrandEmailsSchema = z.object({
+  userId: userIdArg,
+  accessToken: z.string().optional(),
+  niche: z.string().min(2),
+  country: z.string().min(2),
+});
+
+/** Fill in contact emails for the brands a search just found.
+ * This runs as a SEPARATE call after discoverBrands returns, because
+ * fetching each brand's contact pages takes several seconds and the
+ * search itself (web search + AI) already uses most of Netlify's
+ * function time — doing both in one call fails with a 504. The brands
+ * show up immediately; their emails land a few seconds later and the
+ * list refreshes. A brand that publishes no public email simply stays
+ * blank — that is the honest result, and its contact-page link is
+ * saved instead when one is found. */
+export async function enrichBrandEmails(
+  ctx: ActionCtx,
+  args: z.infer<typeof enrichBrandEmailsSchema>,
+): Promise<{ enriched: number }> {
+  const db = requireDb(ctx);
+  await requireVerifiedUser(ctx, args.userId, args.accessToken);
+  await requireProPlan(ctx, args.userId);
+  const niche = args.niche.trim();
+  const country = args.country.trim();
+  const { data, error } = await db
+    .from("brands")
+    .select("id, name, website, contact_email, evidence_json")
+    .eq("owner_id", args.userId)
+    .eq("is_suggestion", true)
+    .eq("niche", niche)
+    .eq("creator_market", country)
+    .is("contact_email", null)
+    .order("created_at", { ascending: false })
+    .limit(8);
+  dbThrow(error, "enrichBrandEmails list");
+  const rows = (data ?? []) as BrandRow[];
+  let enriched = 0;
+  await Promise.allSettled(
+    rows.map(async (b) => {
+      const website = (b.website ?? "").trim() || null;
+      if (!website) return;
+      try {
+        const found = await Promise.race([
+          discoverBrandEmails({
+            brandName: b.name,
+            website,
+            candidatePages: [],
+          }),
+          new Promise<null>((resolve) =>
+            setTimeout(() => resolve(null), 8_000),
+          ),
+        ]);
+        if (!found) return;
+        const best = bestContact(found.contacts);
+        const patch: { contact_email?: string | null; evidence_json?: unknown } = {};
+        if (best) patch.contact_email = best.email;
+        if (found.contactPageUrl) {
+          const prev = (b.evidence_json ?? {}) as Record<string, unknown>;
+          patch.evidence_json = { ...prev, contactPageUrl: found.contactPageUrl };
+        }
+        if (Object.keys(patch).length === 0) return;
+        const { error: upErr } = await db
+          .from("brands")
+          .update(patch)
+          .eq("id", b.id);
+        dbThrow(upErr, "enrichBrandEmails update");
+        enriched++;
+      } catch {
+        /* no contact found for this brand — leave it blank */
+      }
+    }),
+  );
+  return { enriched };
 }
 
 export const addBrandSchema = z.object({
