@@ -118,6 +118,26 @@ create table deals (
   notes text,
   research_json jsonb,
   research_checked_at timestamptz,
+  brand_email_source text,
+  brand_email_category text,
+  brand_email_manual boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+-- ------------------------------------------------------------------
+-- brand_contacts: every email discovered for a deal (the best one is
+-- copied to deals.brand_email). The creator can view this list and
+-- pick another contact; research never overwrites a manual email.
+-- ------------------------------------------------------------------
+create table brand_contacts (
+  id bigint generated always as identity primary key,
+  owner_id text,
+  deal_id bigint not null references deals(id) on delete cascade,
+  email text not null,
+  category text,
+  source_url text,
+  rank_score integer not null default 0,
+  mx_verified boolean,
   created_at timestamptz not null default now()
 );
 
@@ -224,6 +244,8 @@ create index idx_profiles_owner_id on profiles (owner_id);
 create index idx_calculations_owner_id on calculations (owner_id);
 create index idx_brands_owner_id on brands (owner_id);
 create index idx_deals_owner_id on deals (owner_id);
+create index idx_brand_contacts_owner_deal on brand_contacts (owner_id, deal_id);
+create unique index idx_brand_contacts_deal_email on brand_contacts (deal_id, lower(email));
 create index idx_invoices_owner_id on invoices (owner_id);
 create index idx_reminders_owner_id on reminders (owner_id);
 create index idx_pro_payments_owner_id on pro_payments (owner_id);

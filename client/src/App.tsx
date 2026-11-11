@@ -2835,6 +2835,27 @@ function BrandResearchSection({ deal, userId, accessToken, invalidate, autoResea
               {missing.length > 0 && (
                 <p className="text-xs text-[var(--dim)]">No public evidence found for: {missing.join(", ")}. Nothing was invented for these.</p>
               )}
+              {Array.isArray(r.contacts) && r.contacts.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-[var(--dim)]">Discovered contacts</p>
+                  <ul className="mt-1 space-y-2">
+                    {r.contacts.map((c) => (
+                      <li key={c.email} className="text-sm">
+                        <p className="font-medium [overflow-wrap:anywhere]">{c.email}</p>
+                        <p className="text-xs text-[var(--dim)]">
+                          {c.category ?? "Business Contact"}
+                          {c.sourceUrl ? (<> · <a href={c.sourceUrl} target="_blank" rel="noreferrer" className="underline">Source</a></>) : ""}
+                          {c.mxVerified === false ? " · domain cannot receive mail" : ""}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-1 text-xs text-[var(--dim)]">The best match is saved as this deal's brand email. Pick another from the brand email field.</p>
+                </div>
+              )}
+              {Array.isArray(r.contacts) && r.contacts.length === 0 && (
+                <p className="text-xs text-[var(--dim)]">No suitable sponsorship contact found in public sources. Add an email manually or visit the official contact page.</p>
+              )}
               {r.sources.length > 0 && (
                 <div>
                   <p className="text-xs font-bold uppercase tracking-wide text-[var(--dim)]">Sources</p>
@@ -2884,6 +2905,132 @@ function GmailGrantPanel() {
   );
 }
 
+/* Discovered brand contacts — a bottom sheet listing every publicly
+   found sponsorship contact for a deal, best-ranked first. The
+   creator picks one (it becomes the deal's brand email) or keeps
+   their own typed address. Nothing is sent from here; sending only
+   happens from the pitch / invoice cards after the creator reviews. */
+function BrandContactsSheet({ open, onClose, deal, userId, accessToken, invalidate }: {
+  open: boolean;
+  onClose: () => void;
+  deal: Deal;
+  userId: string;
+  accessToken?: string;
+  invalidate: () => void;
+}) {
+  const reduce = useReducedMotion();
+  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const contactsQuery = useQuery({
+    queryKey: ["brand-contacts", deal.id],
+    queryFn: () => api.listBrandContacts({ userId, accessToken, dealId: deal.id }),
+    enabled: open,
+  });
+  const selectMut = useMutation({
+    mutationFn: (contactId: number) => api.selectBrandContact({ userId, accessToken, dealId: deal.id, contactId }),
+    onSuccess: (r) => {
+      setSelectedId(null);
+      invalidate();
+      toast.success(`Brand email set to ${r.email}`);
+      onClose();
+    },
+    onError: () => toast.error("Could not use that contact. Try again."),
+  });
+  const contacts = contactsQuery.data?.contacts ?? [];
+  const website = deal.research?.website ?? null;
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          <motion.div
+            key="contacts-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-40 bg-black/60"
+            onClick={onClose}
+            aria-hidden
+          />
+          <motion.div
+            key="contacts-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label={`Discovered contacts for ${deal.brandName}`}
+            initial={reduce ? { opacity: 0 } : { y: "105%" }}
+            animate={reduce ? { opacity: 1 } : { y: 0 }}
+            exit={reduce ? { opacity: 0 } : { y: "105%" }}
+            transition={reduce ? { duration: 0.15 } : { duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+            className="sheet-glass fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-3xl rounded-t-[28px] px-6 pb-safe pt-3"
+          >
+            <span className="sheet-shimmer" aria-hidden />
+            <div className="mx-auto h-1.5 w-10 rounded-full bg-white/25" aria-hidden />
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <h2 className="display-tight font-headline text-[22px] font-bold">Brand contacts</h2>
+              <button type="button" className={btnGhost} onClick={onClose}>Close</button>
+            </div>
+            <p className="mt-1 text-sm text-[var(--dim)]">
+              Publicly listed contacts for {deal.brandName}, best match first. Pick one to use as this deal's brand email.
+            </p>
+            {contactsQuery.isPending && (
+              <p className="mt-4 inline-flex items-center gap-2 text-sm text-[var(--dim)]" role="status"><Spinner /> Loading contacts…</p>
+            )}
+            {contactsQuery.isError && (
+              <p className="mt-4 text-sm text-[var(--danger)]" role="alert">Could not load contacts. Try again.</p>
+            )}
+            {!contactsQuery.isPending && !contactsQuery.isError && contacts.length === 0 && (
+              <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3.5">
+                <p className="text-sm leading-relaxed">
+                  No suitable sponsorship contact found. Add an email manually or visit the official contact page.
+                </p>
+                {website && (
+                  <a href={website} target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm font-semibold text-[var(--accent)] underline [overflow-wrap:anywhere]">
+                    Visit {deal.brandName}'s website
+                  </a>
+                )}
+              </div>
+            )}
+            {contacts.length > 0 && (
+              <ul className="mt-4 divide-y divide-[var(--border)]">
+                {contacts.map((c) => {
+                  const isCurrent = deal.brandEmail != null && deal.brandEmail.toLowerCase() === c.email.toLowerCase();
+                  return (
+                    <li key={c.id ?? c.email} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-bold [overflow-wrap:anywhere]">
+                          {c.email}
+                          {isCurrent && <span className="ml-2 rounded-full bg-[var(--accent)]/15 px-2 py-0.5 text-[11px] font-bold text-[var(--accent)]">In use</span>}
+                        </p>
+                        <p className="mt-0.5 text-xs text-[var(--dim)]">
+                          {c.category ?? "Business Contact"}
+                          {c.sourceUrl ? (
+                            <> · <a href={c.sourceUrl} target="_blank" rel="noreferrer" className="underline">Source</a></>
+                          ) : ""}
+                          {c.mxVerified === false ? " · domain cannot receive mail" : ""}
+                        </p>
+                      </div>
+                      {!isCurrent && (
+                        <button
+                          type="button"
+                          className={btnSmall + " flex-none"}
+                          disabled={selectMut.isPending && selectedId === c.id}
+                          onClick={() => { setSelectedId(c.id); selectMut.mutate(c.id ?? 0); }}
+                        >
+                          {selectMut.isPending && selectedId === c.id ? "Using…" : "Use this"}
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            <div className="h-4" />
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
 function DealCard({ deal, data, userId, accessToken, invalidate, goInvoices, index = 0, autoResearch, onAutoResearchDone }: { deal: Deal; data: Dash; userId: string; accessToken?: string; invalidate: () => void; goInvoices: () => void; index?: number; autoResearch?: boolean; onAutoResearchDone?: () => void }) {
   const reduce = useReducedMotion();
   const [subject, setSubject] = useState(deal.pitchSubject ?? "");
@@ -2896,6 +3043,7 @@ function DealCard({ deal, data, userId, accessToken, invalidate, goInvoices, ind
   // True when the send failed only because the Gmail permission was
   // never granted — the panel below offers the one-tap grant.
   const [needsGmailGrant, setNeedsGmailGrant] = useState(false);
+  const [showContacts, setShowContacts] = useState(false);
 
   const genMut = useMutation({
     mutationFn: () => api.generatePitch({ userId, accessToken, dealId: deal.id }),
@@ -3001,7 +3149,7 @@ function DealCard({ deal, data, userId, accessToken, invalidate, goInvoices, ind
           </select>
         </div>
         <div>
-          <label className={labelCls} htmlFor={`deal-price-${deal.id}`}>Agreed price ({deal.currency})</label>
+          <label className={labelCls} htmlFor={`deal-price-${deal.id}`}>Agreed price</label>
           <input
             id={`deal-price-${deal.id}`} className={inputCls} inputMode="decimal" value={price}
             onChange={(e) => setPrice(e.target.value)}
@@ -3020,6 +3168,29 @@ function DealCard({ deal, data, userId, accessToken, invalidate, goInvoices, ind
             onBlur={() => api.updateDeal({ userId, accessToken, id: deal.id, brandEmail: email.trim() || null }).then(invalidate)}
             placeholder="partnerships@brand.com"
           />
+          {deal.brandEmail && deal.brandEmailCategory && (
+            <p className="mt-1.5 text-xs text-[var(--dim)]">
+              Contact type: {deal.brandEmailCategory}
+              {deal.brandEmailSource && deal.brandEmailSource !== "manual" ? (
+                <> · Source: <a href={deal.brandEmailSource} target="_blank" rel="noreferrer" className="underline">Official website</a></>
+              ) : deal.brandEmailSource === "manual" ? (
+                <> · Added manually</>
+              ) : null}
+            </p>
+          )}
+          {!deal.brandEmail && deal.research && Array.isArray(deal.research.contacts) && deal.research.contacts.length === 0 && (
+            <p className="mt-1.5 text-xs text-[var(--dim)]">
+              No suitable sponsorship contact found. Add an email manually
+              {deal.research.website ? (
+                <> or <a href={deal.research.website} target="_blank" rel="noreferrer" className="underline">visit the official contact page</a></>
+              ) : " or visit the official contact page"}
+              .
+            </p>
+          )}
+          <button type="button" className="mt-2 text-sm font-semibold text-[var(--accent)] underline" onClick={() => setShowContacts(true)}>
+            View discovered contacts
+          </button>
+          <BrandContactsSheet open={showContacts} onClose={() => setShowContacts(false)} deal={deal} userId={userId} accessToken={accessToken} invalidate={invalidate} />
         </div>
       </div>
 

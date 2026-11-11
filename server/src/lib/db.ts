@@ -122,6 +122,21 @@ export interface DealRow {
   notes: string | null;
   research_json: unknown | null;
   research_checked_at: string | null;
+  brand_email_source: string | null;
+  brand_email_category: string | null;
+  brand_email_manual: boolean | null;
+  created_at: string;
+}
+
+export interface BrandContactRow {
+  id: number;
+  owner_id: string | null;
+  deal_id: number;
+  email: string;
+  category: string | null;
+  source_url: string | null;
+  rank_score: number;
+  mx_verified: boolean | null;
   created_at: string;
 }
 

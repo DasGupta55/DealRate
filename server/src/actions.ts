@@ -34,8 +34,12 @@ import {
   saveManualProfileSchema,
 } from "./actions/profiles";
 import {
+  listBrandContacts,
+  listBrandContactsSchema,
   researchBrand,
   researchBrandSchema,
+  selectBrandContact,
+  selectBrandContactSchema,
 } from "./actions/brandResearch";
 import {
   addBrand,
@@ -127,6 +131,8 @@ export const Actions: Record<string, ActionHandler> = {
   addBrand: asHandler(addBrand),
   addBrandToDeals: asHandler(addBrandToDeals),
   researchBrand: asHandler(researchBrand),
+  listBrandContacts: asHandler(listBrandContacts),
+  selectBrandContact: asHandler(selectBrandContact),
   deleteBrand: asHandler(deleteBrand),
   createDeal: asHandler(createDeal),
   updateDeal: asHandler(updateDeal),
@@ -168,6 +174,8 @@ export type ActionHandlers = {
   addBrand: typeof addBrand;
   addBrandToDeals: typeof addBrandToDeals;
   researchBrand: typeof researchBrand;
+  listBrandContacts: typeof listBrandContacts;
+  selectBrandContact: typeof selectBrandContact;
   deleteBrand: typeof deleteBrand;
   createDeal: typeof createDeal;
   updateDeal: typeof updateDeal;
@@ -204,6 +212,8 @@ export const ActionSchemas: Record<string, z.ZodTypeAny> = {
   addBrand: addBrandSchema,
   addBrandToDeals: addBrandToDealsSchema,
   researchBrand: researchBrandSchema,
+  listBrandContacts: listBrandContactsSchema,
+  selectBrandContact: selectBrandContactSchema,
   deleteBrand: deleteBrandSchema,
   createDeal: createDealSchema,
   updateDeal: updateDealSchema,

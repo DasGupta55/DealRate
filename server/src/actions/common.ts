@@ -97,12 +97,26 @@ export interface BrandResearch {
   contact: string | null;
   sources: { title: string; url: string }[];
   checkedAt: string;
+  contacts: BrandContact[];
+}
+
+/** One publicly listed brand contact, discovered by research. */
+export interface BrandContact {
+  id: number | null;
+  email: string;
+  category: string | null;
+  sourceUrl: string | null;
+  rankScore: number;
+  mxVerified: boolean | null;
 }
 
 export interface DealOut {
   id: number;
   brandName: string;
   brandEmail: string | null;
+  brandEmailSource: string | null;
+  brandEmailCategory: string | null;
+  brandEmailManual: boolean;
   stage: string;
   deliverable: string;
   agreedPrice: number | null;
@@ -245,6 +259,9 @@ export function toDealOut(r: DealRow): DealOut {
     id: r.id,
     brandName: r.brand_name,
     brandEmail: r.brand_email,
+    brandEmailSource: r.brand_email_source ?? null,
+    brandEmailCategory: r.brand_email_category ?? null,
+    brandEmailManual: r.brand_email_manual ?? false,
     stage: r.stage,
     deliverable: r.deliverable,
     agreedPrice: r.agreed_price,

@@ -29,6 +29,25 @@ import {
   type PitchDraft,
 } from "./common";
 
+const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
+
+/** The fee as it appears in a pitch: the creator's own agreed price
+ *  only, as a plain number with no currency code or symbol. Never the
+ *  calculator's estimate and never a USD (or any currency) assumption.
+ *  Null when the creator has not set a price — the pitch then says
+ *  the rate is available on request. */
+export function pitchFeeText(price: number | null | undefined): string | null {
+  return price != null && price > 0 ? fmt(price) : null;
+}
+
+/** The forms the pitch quality gate accepts for the fee: the plain
+ *  number, with or without the thousands comma (the AI may write
+ *  either). No currency form is ever required. */
+export function pitchFeeForms(price: number | null | undefined): string[] {
+  if (price == null || price <= 0) return [];
+  return [...new Set([fmt(price), String(Math.round(price))])];
+}
+
 export const createDealSchema = z.object({
   userId: userIdArg,
   accessToken: z.string().optional(),
@@ -101,14 +120,42 @@ export async function updateDeal(
   const patch: Record<string, unknown> = {};
   if (args.stage !== undefined) patch.stage = args.stage;
   if (args.agreedPrice !== undefined) patch.agreed_price = args.agreedPrice;
-  if (args.brandEmail !== undefined) patch.brand_email = args.brandEmail;
+  if (args.brandEmail !== undefined) {
+    patch.brand_email = args.brandEmail;
+    // A brand email set here was typed by the creator, so research
+    // must never silently overwrite it. Clearing it (null) re-opens
+    // the deal for auto-discovery.
+    const manual = args.brandEmail !== null && args.brandEmail.trim() !== "";
+    patch.brand_email_source = manual ? "manual" : null;
+    patch.brand_email_category = null;
+    patch.brand_email_manual = manual;
+  }
   if (args.notes !== undefined) patch.notes = args.notes;
   const { error } = await db
     .from("deals")
     .update(patch)
     .eq("id", args.id)
     .eq("owner_id", args.userId);
-  dbThrow(error, "updateDeal");
+  if (error) {
+    const msg = String((error as { message?: string }).message ?? error);
+    if (/column|brand_email_source|brand_email_category|brand_email_manual/i.test(msg)) {
+      // Provenance columns missing (migration not run) — retry with
+      // just the core fields so the edit still saves.
+      const core: Record<string, unknown> = {};
+      if (args.stage !== undefined) core.stage = args.stage;
+      if (args.agreedPrice !== undefined) core.agreed_price = args.agreedPrice;
+      if (args.brandEmail !== undefined) core.brand_email = args.brandEmail;
+      if (args.notes !== undefined) core.notes = args.notes;
+      const { error: retryError } = await db
+        .from("deals")
+        .update(core)
+        .eq("id", args.id)
+        .eq("owner_id", args.userId);
+      dbThrow(retryError, "updateDeal");
+      return { ok: true };
+    }
+    dbThrow(error, "updateDeal");
+  }
   return { ok: true };
 }
 
@@ -204,12 +251,15 @@ export async function generatePitch(
   const avgViews = profile?.avg_views ?? calc?.avg_views ?? null;
   const engagement = profile?.engagement_pct ?? calc?.engagement_pct ?? null;
   const subscribers = profile?.subscribers ?? null;
-  const price = deal.agreed_price ?? calc?.price_mid ?? null;
-  const currency = deal.currency ?? "USD";
+  const price = deal.agreed_price ?? null;
   const deliverableLabel =
     DELIVERABLE_LABEL[deal.deliverable] ?? "Dedicated video";
   const fmt = (n: number) => Math.round(n).toLocaleString("en-US");
-  const feeText = price ? `${currency} ${fmt(price)}` : null;
+  // The fee is the creator's own agreed price only, as a plain number
+  // with no currency code or symbol — never the calculator's estimate
+  // and never a USD (or any currency) assumption. No price means the
+  // pitch says the rate is available on request.
+  const feeText = pitchFeeText(price);
 
   // Full signature: real name, channel, channel link. Never a
   // bracketed placeholder.
@@ -292,13 +342,10 @@ export async function generatePitch(
     "limited time",
     "don't miss",
   ];
-  const feeForms: string[] = price
-    ? [
-        `${currency} ${fmt(price)}`,
-        `${fmt(price)} ${currency}`,
-        ...(currency === "USD" ? [`$${fmt(price)}`] : []),
-      ]
-    : [];
+  // The fee must appear exactly as the creator entered it — the plain
+  // number, with or without the thousands comma (the AI may write
+  // either). No currency code or symbol is ever required.
+  const feeForms: string[] = pitchFeeForms(price);
   const passesGate = (s: string, b: string): boolean => {
     const words = b.trim().split(/\s+/).length;
     if (words < 60 || words > 180) return false;
@@ -328,7 +375,7 @@ export async function generatePitch(
         `- Creator: ${creatorName ?? "name not given"}. Channel: "${channelName}"${channelUrl ? ` (${channelUrl})` : ""}. Niche: ${niche ?? "not given"}. Audience: ${audienceCountry ?? "not given"}.`,
         `- Verified stats (use at most ONE, the strongest): ${statsFact || "none available"}.`,
         `- Brand: ${deal.brand_name}. ${brandContext}`,
-        `- Deal: ${deliverableLabel} on YouTube. Proposed fee: ${feeText ?? "not set — write 'My rate for this deliverable is available on request.'"} (state the exact amount and currency, tied to the deliverable).`,
+        `- Deal: ${deliverableLabel} on YouTube. Proposed fee: ${feeText ?? "not set — write 'My rate for this deliverable is available on request.'"} (state the exact amount as a plain number with no currency code or symbol, tied to the deliverable).`,
         `- Contact name: not available.`,
         ...(deal.notes ? [`- Creator notes: ${deal.notes}`] : []),
         ``,
