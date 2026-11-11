@@ -2719,7 +2719,7 @@ function BrandsTab({ data, userId, accessToken, invalidate, goDeals, onDealAdded
   const discoverMut = useMutation({
     mutationFn: () => api.discoverBrands({ userId, accessToken, niche, country }),
     onSuccess: (r) => { setMsg(r.message); invalidate(); if (r.found > 0) toast.success(`Found ${r.found} brand suggestion${r.found === 1 ? "" : "s"} to review`); },
-    onError: () => { setMsg("Brand search failed. Check your connection and try again."); toast.error("Brand search failed. Try again."); },
+    onError: (e) => { const m = e instanceof Error && e.message ? e.message : "Brand search failed. Check your connection and try again."; setMsg(m); toast.error(m); },
   });
   const addMut = useMutation({
     mutationFn: () => api.addBrand({ userId, accessToken, name: name.trim(), contactEmail: email.trim() || undefined, website: website.trim() || undefined, niche }),
