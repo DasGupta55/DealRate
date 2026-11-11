@@ -98,6 +98,8 @@ export interface BrandResearch {
   sources: { title: string; url: string }[];
   checkedAt: string;
   contacts: BrandContact[];
+  phones: BrandPhone[];
+  contactPageUrl: string | null;
 }
 
 /** One publicly listed brand contact, discovered by research. */
@@ -108,6 +110,12 @@ export interface BrandContact {
   sourceUrl: string | null;
   rankScore: number;
   mxVerified: boolean | null;
+}
+
+/** One phone number listed on the brand's own pages. */
+export interface BrandPhone {
+  phone: string;
+  sourceUrl: string | null;
 }
 
 export interface DealOut {

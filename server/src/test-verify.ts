@@ -35,7 +35,7 @@ async function main() {
   check("C: zero price -> fee null", pitchFeeText(0) === null);
 
   // --- Test D: multiple brand emails, rank influencers first ---
-  const found = await discoverBrandEmails({
+  const found = (await discoverBrandEmails({
     brandName: "Example",
     website: null,
     candidatePages: [
@@ -46,7 +46,7 @@ async function main() {
           "Reach us at support@acmebrand.com or marketing@acmebrand.com. Creators write to influencers@acmebrand.com. Billing queries: billing@acmebrand.com.",
       },
     ],
-  });
+  })).contacts;
   const emails = found.map((c) => c.email);
   check(
     "D: support and billing are excluded",
@@ -77,16 +77,16 @@ async function main() {
   );
 
   // --- Test E: no email anywhere ---
-  const none = await discoverBrandEmails({
+  const none = (await discoverBrandEmails({
     brandName: "NoMailBrand",
     website: null,
     candidatePages: [],
-  });
+  })).contacts;
   check("E: no emails -> empty list", none.length === 0, `got ${none.length}`);
   check("E: no emails -> no best contact", bestContact(none) === null);
 
   // --- Ranking: partnership page boosts a generic address ---
-  const boosted = await discoverBrandEmails({
+  const boosted = (await discoverBrandEmails({
     brandName: "Boost",
     website: null,
     candidatePages: [
@@ -101,11 +101,46 @@ async function main() {
         content: "General enquiries: info@boost.example.",
       },
     ],
-  });
+  })).contacts;
   check(
     "Ranking: hello@ on a partnerships page outranks generic info@",
     bestContact(boosted)?.email === "hello@boost.example",
     `got ${bestContact(boosted)?.email}`,
+  );
+
+  // --- Test F: phone extraction — real phones kept, garbage dropped ---
+  const withPhone = await discoverBrandEmails({
+    brandName: "PhoneBrand",
+    website: null,
+    candidatePages: [
+      {
+        url: "https://phonebrand.example/contact",
+        title: "Contact",
+        content:
+          "Call us on +91 88007 78017 or 011-4412-3544. We have served 100000000 customers since 20240403. Order id 17803765471080. Reach 99999999 for bulk orders.",
+      },
+    ],
+  });
+  const phones = withPhone.phones.map((p) => p.phone);
+  check(
+    "F: real international phone is found",
+    phones.includes("+918800778017"),
+    `got ${JSON.stringify(phones)}`,
+  );
+  check(
+    "F: real landline near a phone word is found",
+    phones.includes("01144123544"),
+    `got ${JSON.stringify(phones)}`,
+  );
+  check(
+    "F: counts, dates, order ids and repeated digits are not phones",
+    !phones.some((p) => ["100000000", "20240403", "17803765471080", "99999999"].includes(p)),
+    `got ${JSON.stringify(phones)}`,
+  );
+  check(
+    "F: contact page URL is returned",
+    withPhone.contactPageUrl === "https://phonebrand.example/contact",
+    `got ${withPhone.contactPageUrl}`,
   );
 
   console.log(failures === 0 ? "\nALL TESTS PASSED" : `\n${failures} TEST(S) FAILED`);

@@ -2853,8 +2853,28 @@ function BrandResearchSection({ deal, userId, accessToken, invalidate, autoResea
                   <p className="mt-1 text-xs text-[var(--dim)]">The best match is saved as this deal's brand email. Pick another from the brand email field.</p>
                 </div>
               )}
-              {Array.isArray(r.contacts) && r.contacts.length === 0 && (
-                <p className="text-xs text-[var(--dim)]">No suitable sponsorship contact found in public sources. Add an email manually or visit the official contact page.</p>
+              {Array.isArray(r.phones) && r.phones.length > 0 && (
+                <div>
+                  <p className="text-xs font-bold uppercase tracking-wide text-[var(--dim)]">Phone</p>
+                  <ul className="mt-1 space-y-1">
+                    {r.phones.map((p) => (
+                      <li key={p.phone} className="text-sm">
+                        <a href={`tel:${p.phone.replace(/[^\d+]/g, "")}`} className="font-medium text-[var(--accent)] underline">{p.phone}</a>
+                        {p.sourceUrl ? (<span className="text-xs text-[var(--dim)]"> · <a href={p.sourceUrl} target="_blank" rel="noreferrer" className="underline">Source</a></span>) : ""}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {Array.isArray(r.contacts) && r.contacts.length === 0 && (!Array.isArray(r.phones) || r.phones.length === 0) && (
+                <p className="text-xs text-[var(--dim)]">
+                  No public email or phone found for this brand — most brands only take messages through a form.{" "}
+                  {r.contactPageUrl ? (
+                    <a href={r.contactPageUrl} target="_blank" rel="noreferrer" className="font-medium text-[var(--accent)] underline">Contact them through their website</a>
+                  ) : (
+                    "Add an email manually or visit the official contact page."
+                  )}
+                </p>
               )}
               {r.sources.length > 0 && (
                 <div>
@@ -2980,13 +3000,17 @@ function BrandContactsSheet({ open, onClose, deal, userId, accessToken, invalida
             {!contactsQuery.isPending && !contactsQuery.isError && contacts.length === 0 && (
               <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3.5">
                 <p className="text-sm leading-relaxed">
-                  No suitable sponsorship contact found. Add an email manually or visit the official contact page.
+                  No public email found for this brand — most brands only take messages through a form. Add an email manually, or contact them through their website.
                 </p>
-                {website && (
+                {deal.research?.contactPageUrl ? (
+                  <a href={deal.research.contactPageUrl} target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm font-semibold text-[var(--accent)] underline [overflow-wrap:anywhere]">
+                    Contact {deal.brandName} through their website
+                  </a>
+                ) : website ? (
                   <a href={website} target="_blank" rel="noreferrer" className="mt-2 inline-block text-sm font-semibold text-[var(--accent)] underline [overflow-wrap:anywhere]">
                     Visit {deal.brandName}'s website
                   </a>
-                )}
+                ) : null}
               </div>
             )}
             {contacts.length > 0 && (
@@ -3166,10 +3190,12 @@ function DealCard({ deal, data, userId, accessToken, invalidate, index = 0, auto
               ) : null}
             </p>
           )}
-          {!deal.brandEmail && deal.research && Array.isArray(deal.research.contacts) && deal.research.contacts.length === 0 && (
+          {!deal.brandEmail && deal.research && Array.isArray(deal.research.contacts) && deal.research.contacts.length === 0 && (!Array.isArray(deal.research.phones) || deal.research.phones.length === 0) && (
             <p className="mt-1.5 text-xs text-[var(--dim)]">
-              No suitable sponsorship contact found. Add an email manually
-              {deal.research.website ? (
+              No public email or phone found — most brands only take messages through a form. Add an email manually
+              {deal.research.contactPageUrl ? (
+                <> or <a href={deal.research.contactPageUrl} target="_blank" rel="noreferrer" className="underline">contact them through their website</a></>
+              ) : deal.research.website ? (
                 <> or <a href={deal.research.website} target="_blank" rel="noreferrer" className="underline">visit the official contact page</a></>
               ) : " or visit the official contact page"}
               .

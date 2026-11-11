@@ -114,6 +114,85 @@ export interface DiscoveredContact {
   mxVerified: boolean | null;
 }
 
+export interface DiscoveredPhone {
+  phone: string;
+  sourceUrl: string | null;
+}
+
+export interface DiscoveryResult {
+  contacts: DiscoveredContact[];
+  phones: DiscoveredPhone[];
+  /** The brand's contact page, when one was found or can be guessed,
+   *  so the creator can reach out through the brand's form when no
+   *  public email exists. */
+  contactPageUrl: string | null;
+}
+
+// Common paths where a brand lists its contact / partnership details.
+// Tried proactively when the official website is known, because the
+// search results often do not include the contact page at all.
+const CONTACT_PATHS = [
+  "contact",
+  "contact-us",
+  "partnerships",
+  "partners",
+  "collaborate",
+  "creators",
+  "influencers",
+  "about",
+  "about-us",
+];
+
+// A phone number: it must start with + (international) or contain a
+// separator (space, dash, dot or parentheses). A bare run of digits
+// with no separator is almost never a phone number on a web page —
+// it is an order id, a price, a count or a placeholder. 7-15 digits.
+const PHONE_CANDIDATE_RE = /\+[\d\s().-]{6,}\d|\(?\d[\d\s().-]*\d[\s().-]\d[\d\s().-]*\d/g;
+
+function cleanPhone(raw: string): string | null {
+  const trimmed = raw.trim();
+  // Keep a leading + and the digits only.
+  const digits = trimmed.replace(/[^\d]/g, "");
+  const plus = trimmed.startsWith("+");
+  if (digits.length < 7 || digits.length > 15) return null;
+  // Without a country code a phone number is at most 11 digits; a
+  // longer bare run is an id, an order number or a timestamp.
+  if (!plus && digits.length > 11) return null;
+  // All the same digit (99999999) or a round count (100000000) is a
+  // placeholder or a statistic, not a phone number.
+  if (/^(\d)\1+$/.test(digits)) return null;
+  if (/0{5,}$/.test(digits)) return null;
+  // A date (20240403) is not a phone number.
+  if (/^(19|20)\d{6}$/.test(digits)) return null;
+  return plus ? `+${digits}` : digits;
+}
+
+function extractPhones(text: string): string[] {
+  const out: string[] = [];
+  for (const m of text.matchAll(PHONE_CANDIDATE_RE)) {
+    const raw = m[0] ?? "";
+    const cleaned = cleanPhone(raw);
+    if (!cleaned) continue;
+    // A well-formatted international number (+91 88007 78017) is a
+    // phone by format alone. Anything else is only a phone number
+    // when it sits next to a phone word (call, tel, mobile,
+    // whatsapp, contact) — otherwise it is a price, a product code
+    // or a count that happens to have separators.
+    const wellFormatted = cleaned.startsWith("+") && /[\s().-]/.test(raw) && cleaned.length >= 11;
+    if (wellFormatted) {
+      out.push(cleaned);
+      continue;
+    }
+    const start = Math.max(0, (m.index ?? 0) - 60);
+    const end = Math.min(text.length, (m.index ?? 0) + raw.length + 60);
+    const ctx = text.slice(start, end).toLowerCase();
+    if (/phone|call|tel|mobile|whatsapp|contact|helpline|toll[\s-]?free/.test(ctx)) {
+      out.push(cleaned);
+    }
+  }
+  return out;
+}
+
 function cleanEmail(raw: string): string | null {
   let e = raw.trim().toLowerCase();
   // Strip trailing punctuation the regex may have caught.
@@ -259,15 +338,17 @@ function pickPages(
 /**
  * Discover a brand's publicly listed sponsorship contacts.
  * Returns every usable address found, ranked best-first, each with
- * its category, the page it came from, and an MX verdict. Excluded
- * addresses (support, billing, refunds, sales, personal) are dropped
- * from the returned list entirely.
+ * its category, the page it came from, and an MX verdict; the phone
+ * numbers found on the brand's pages; and the brand's contact page
+ * URL when one was found or can be guessed. Excluded addresses
+ * (support, billing, refunds, sales, personal) are dropped from the
+ * returned list entirely.
  */
 export async function discoverBrandEmails(input: {
   brandName: string;
   website: string | null;
   candidatePages: { url: string; title: string; content: string }[];
-}): Promise<DiscoveredContact[]> {
+}): Promise<DiscoveryResult> {
   const { website, candidatePages } = input;
 
   // 1. Addresses already visible in the search snippets.
@@ -278,22 +359,57 @@ export async function discoverBrandEmails(input: {
       found.set(email, { sourceUrl, title, mailto });
     }
   };
+  const phones = new Map<string, string | null>();
+  const addPhone = (phone: string, sourceUrl: string | null) => {
+    if (!phones.has(phone)) phones.set(phone, sourceUrl);
+  };
   for (const p of candidatePages) {
     for (const e of extractFromText(p.content ?? "")) add(e, p.url, p.title, false);
+    for (const ph of extractPhones(p.content ?? "")) addPhone(ph, p.url);
   }
 
-  // 2. Fetch the most promising pages and scan them.
+  // 2. Fetch the most promising pages and scan them. The search
+  // results often do not include the brand's contact page, so when
+  // the official website is known, also try its common contact /
+  // partnership paths directly — that is where the email usually is.
+  // A contact page already present in the search results counts as
+  // the contact page even if it cannot be fetched.
+  let contactPageUrl: string | null = null;
+  for (const p of candidatePages) {
+    const hay = `${p.url} ${p.title}`.toLowerCase();
+    if (!contactPageUrl && /contact|partner|creator|influencer|collab/.test(hay)) {
+      contactPageUrl = p.url;
+    }
+  }
   const pages = pickPages(candidatePages, website);
   // Always include the official homepage itself when known.
   if (website && !pages.some((p) => p.url === website)) {
     pages.unshift({ url: website, title: "", content: "" });
   }
+  // Proactive contact-page guesses (website + /contact, and so on).
+  const base = website ? website.replace(/\/$/, "") : null;
+  const guessed: { url: string; title: string; content: string }[] = [];
+  if (base) {
+    for (const path of CONTACT_PATHS) {
+      const url = `${base}/${path}`;
+      if (!pages.some((p) => p.url === url)) {
+        guessed.push({ url, title: path, content: "" });
+      }
+    }
+  }
+  const toFetch = [...pages.slice(0, 4), ...guessed].slice(0, 8);
   const fetched = await Promise.allSettled(
-    pages.slice(0, 4).map(async (p) => ({ page: p, html: await fetchPageText(p.url) })),
+    toFetch.map(async (p) => ({ page: p, html: await fetchPageText(p.url) })),
   );
+  // The first contact-ish page that actually loaded, for the
+  // "contact via their website" fallback link.
   for (const s of fetched) {
     if (s.status !== "fulfilled" || !s.value.html) continue;
     const { page, html } = s.value;
+    const hay = `${page.url} ${page.title}`.toLowerCase();
+    if (!contactPageUrl && /contact|partner|creator|influencer|collab/.test(hay)) {
+      contactPageUrl = page.url;
+    }
     const mailtos = new Set<string>();
     for (const m of html.matchAll(MAILTO_RE)) {
       const cleaned = cleanEmail(decodeURIComponent(m[1] ?? ""));
@@ -302,7 +418,11 @@ export async function discoverBrandEmails(input: {
     for (const e of extractFromHtml(html)) {
       add(e, page.url, page.title, mailtos.has(e));
     }
+    for (const ph of extractPhones(html)) addPhone(ph, page.url);
   }
+  // No contact page was found in the results: guess the standard
+  // /contact URL so the creator still has somewhere to go.
+  if (!contactPageUrl && base) contactPageUrl = `${base}/contact`;
 
   // 3. Validate, categorize and score.
   const brandHost = website
@@ -334,7 +454,12 @@ export async function discoverBrandEmails(input: {
     if (mxByEmail.has(c.email)) c.mxVerified = mxByEmail.get(c.email) ?? null;
   }
 
-  return scored;
+  const phoneList: DiscoveredPhone[] = [...phones.entries()].map(([phone, sourceUrl]) => ({
+    phone,
+    sourceUrl,
+  }));
+
+  return { contacts: scored, phones: phoneList, contactPageUrl };
 }
 
 /** The single best contact to auto-fill: highest ranked, not

@@ -75,7 +75,9 @@ export async function researchBrand(
         ? (JSON.parse(existing) as ResearchJson)
         : existing;
     const cachedContacts = (parsed as { contacts?: BrandContact[] }).contacts ?? [];
-    if (cachedContacts.length > 0) {
+    const cachedPhones = (parsed as { phones?: { phone: string; sourceUrl: string | null }[] }).phones ?? [];
+    const cachedContactPage = (parsed as { contactPageUrl?: string | null }).contactPageUrl ?? null;
+    if (cachedContacts.length > 0 || cachedPhones.length > 0 || cachedContactPage) {
       // Fill the deal's email from the cached best contact when the
       // creator has not set one (or it was auto-filled before).
       const currentEmail = (deal.brand_email ?? "").trim();
@@ -119,6 +121,8 @@ export async function researchBrand(
         research: {
           ...parsed,
           contacts: cachedContacts,
+          phones: cachedPhones,
+          contactPageUrl: cachedContactPage,
           checkedAt: deal.research_checked_at as string,
         },
       };
@@ -203,6 +207,8 @@ export async function researchBrand(
   // its official pages and the search results. Best-effort: if the
   // pages cannot be fetched, research still returns without contacts.
   let contacts: BrandContact[] = [];
+  let phones: { phone: string; sourceUrl: string | null }[] = [];
+  let contactPageUrl: string | null = null;
   try {
     const discovered = await discoverBrandEmails({
       brandName: name,
@@ -213,7 +219,7 @@ export async function researchBrand(
         content: results.find((r) => r.url === s.url)?.content ?? "",
       })),
     });
-    contacts = discovered.map((c) => ({
+    contacts = discovered.contacts.map((c) => ({
       id: null,
       email: c.email,
       category: c.category,
@@ -221,8 +227,12 @@ export async function researchBrand(
       rankScore: c.rankScore,
       mxVerified: c.mxVerified,
     }));
+    phones = discovered.phones;
+    contactPageUrl = discovered.contactPageUrl;
   } catch {
     contacts = [];
+    phones = [];
+    contactPageUrl = null;
   }
 
   const research: BrandResearch = {
@@ -238,6 +248,8 @@ export async function researchBrand(
     sources: (distilled.sources ?? []).filter((s) => s?.url).slice(0, 8),
     checkedAt: checkedAtIso,
     contacts,
+    phones,
+    contactPageUrl,
   };
 
   // Save on the deal. If the migration has not been run yet the
