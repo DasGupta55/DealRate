@@ -1989,7 +1989,7 @@ export function App() {
             <SkeletonCard lines={2} />
           </div>
         ) : data && canUsePro ? (
-          <DealsTab data={data} userId={userId ?? ""} accessToken={accessToken ?? undefined} invalidate={invalidate} goInvoices={() => setTab("invoices")} autoResearchDealId={autoResearchDealId} onAutoResearchDone={() => setAutoResearchDealId(null)} />
+          <DealsTab data={data} userId={userId ?? ""} accessToken={accessToken ?? undefined} invalidate={invalidate} autoResearchDealId={autoResearchDealId} onAutoResearchDone={() => setAutoResearchDealId(null)} />
         ) : data ? (
           <LockedFeature
             title="Deals"
@@ -3031,7 +3031,7 @@ function BrandContactsSheet({ open, onClose, deal, userId, accessToken, invalida
   );
 }
 
-function DealCard({ deal, data, userId, accessToken, invalidate, goInvoices, index = 0, autoResearch, onAutoResearchDone }: { deal: Deal; data: Dash; userId: string; accessToken?: string; invalidate: () => void; goInvoices: () => void; index?: number; autoResearch?: boolean; onAutoResearchDone?: () => void }) {
+function DealCard({ deal, data, userId, accessToken, invalidate, index = 0, autoResearch, onAutoResearchDone }: { deal: Deal; data: Dash; userId: string; accessToken?: string; invalidate: () => void; index?: number; autoResearch?: boolean; onAutoResearchDone?: () => void }) {
   const reduce = useReducedMotion();
   const [subject, setSubject] = useState(deal.pitchSubject ?? "");
   const [body, setBody] = useState(deal.pitchBody ?? "");
@@ -3111,18 +3111,6 @@ function DealCard({ deal, data, userId, accessToken, invalidate, goInvoices, ind
     },
     onError: () => { setSendMsg("Could not save the draft. Try again."); toast.error("Could not save the draft. Try again."); },
   });
-  const invMut = useMutation({
-    mutationFn: () =>
-      api.createInvoice({
-        userId, accessToken,
-        dealId: deal.id, brandName: deal.brandName, brandEmail: deal.brandEmail ?? undefined,
-        amount: parseFloat(price) || deal.agreedPrice || data.calculations[0]?.priceMid || 0,
-        currency: deal.currency, dueInDays: 30,
-        description: `${DELIVERABLES.find((d) => d.key === deal.deliverable)?.label ?? "Dedicated video"} — ${deal.brandName} collaboration`,
-      }),
-    onSuccess: () => { invalidate(); toast.success("Invoice created"); goInvoices(); },
-  });
-
   const stageLabel = STAGES.find((s) => s.key === deal.stage)?.label ?? deal.stage;
 
   return (
@@ -3205,9 +3193,6 @@ function DealCard({ deal, data, userId, accessToken, invalidate, goInvoices, ind
             {pitchOpen ? "Hide pitch" : "View pitch"}
           </button>
         )}
-        <button type="button" className={btnGhost} disabled={invMut.isPending || deal.stage === "paid"} onClick={() => invMut.mutate()}>
-          Create invoice
-        </button>
       </div>
 
       {pitchOpen && (
@@ -3254,7 +3239,7 @@ function DealCard({ deal, data, userId, accessToken, invalidate, goInvoices, ind
   );
 }
 
-function DealsTab({ data, userId, accessToken, invalidate, goInvoices, autoResearchDealId, onAutoResearchDone }: { data: Dash; userId: string; accessToken?: string; invalidate: () => void; goInvoices: () => void; autoResearchDealId?: number | null; onAutoResearchDone?: () => void }) {
+function DealsTab({ data, userId, accessToken, invalidate, autoResearchDealId, onAutoResearchDone }: { data: Dash; userId: string; accessToken?: string; invalidate: () => void; autoResearchDealId?: number | null; onAutoResearchDone?: () => void }) {
   const [brandName, setBrandName] = useState("");
   const addMut = useMutation({
     mutationFn: () => api.createDeal({ userId, accessToken, brandName: brandName.trim(), deliverable: "dedicated", agreedPrice: data.calculations[0]?.priceMid, currency: "USD" }),
@@ -3282,7 +3267,7 @@ function DealsTab({ data, userId, accessToken, invalidate, goInvoices, autoResea
       </section>
       {data.deals.length === 0 && <p className="text-sm text-[var(--dim)]">No deals yet. Start one from the Brands tab, or add a brand above.</p>}
       <ul className="space-y-4">
-        {data.deals.map((d, i) => <DealCard key={d.id} deal={d} data={data} userId={userId} accessToken={accessToken} invalidate={invalidate} goInvoices={goInvoices} index={i} autoResearch={autoResearchDealId != null && d.id === autoResearchDealId} onAutoResearchDone={onAutoResearchDone} />)}
+        {data.deals.map((d, i) => <DealCard key={d.id} deal={d} data={data} userId={userId} accessToken={accessToken} invalidate={invalidate} index={i} autoResearch={autoResearchDealId != null && d.id === autoResearchDealId} onAutoResearchDone={onAutoResearchDone} />)}
       </ul>
     </div>
   );
