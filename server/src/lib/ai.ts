@@ -13,13 +13,14 @@ export async function chatAiJson<T>(
   env: Env,
   system: string,
   prompt: string,
+  opts?: { maxTokens?: number },
 ): Promise<T> {
   const groqKey = env.groqApiKey ?? "";
   const geminiKey = env.geminiApiKey ?? "";
   try {
-    return await chatGroqJson<T>(groqKey, system, prompt);
+    return await chatGroqJson<T>(groqKey, system, prompt, { maxTokens: opts?.maxTokens });
   } catch (groqErr) {
     if (!geminiKey) throw groqErr;
-    return await chatGeminiJson<T>(geminiKey, system, prompt);
+    return await chatGeminiJson<T>(geminiKey, system, prompt, { maxTokens: opts?.maxTokens });
   }
 }

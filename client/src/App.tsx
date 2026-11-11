@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { SafeAreaTopScrim } from "./components/SafeAreaTopScrim";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -2591,10 +2591,126 @@ function PriceTab(props: {
 
 /* ---------------- Brands tab ---------------- */
 
+import { COUNTRIES, DEFAULT_COUNTRY, countryByName } from "./countries";
+
+/* ---------------- Searchable country picker ----------------
+   A text field that filters the worldwide country list as the
+   creator types, so they can pick their creator/audience market
+   by name. One country at a time. The choice is saved on this
+   device (localStorage) and sent to the backend with every
+   search, so the market genuinely changes the results. */
+const BRAND_COUNTRY_KEY = "dealrate-brand-country";
+
+function readSavedBrandCountry(): string {
+  try {
+    const saved = window.localStorage.getItem(BRAND_COUNTRY_KEY);
+    if (saved && countryByName(saved)) return saved;
+  } catch {
+    /* non-fatal */
+  }
+  return DEFAULT_COUNTRY;
+}
+
+function CountrySelect({ value, onChange }: { value: string; onChange: (name: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState(value);
+  const [highlight, setHighlight] = useState(0);
+  const listRef = useRef<HTMLUListElement | null>(null);
+
+  useEffect(() => { setQuery(value); }, [value ]);
+
+  const matches = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return COUNTRIES;
+    return COUNTRIES.filter((c) => c.name.toLowerCase().includes(q));
+  }, [query ]);
+  const shown = matches.slice(0, 12);
+
+  const pick = (name: string) => {
+    onChange(name);
+    setQuery(name);
+    setOpen(false);
+    try { window.localStorage.setItem(BRAND_COUNTRY_KEY, name); } catch { /* non-fatal */ }
+  };
+
+  return (
+    <div className="relative">
+      <input
+        id="b-country"
+        className={inputCls}
+        value={query}
+        role="combobox"
+        aria-expanded={open}
+        aria-controls="b-country-list"
+        aria-autocomplete="list"
+        placeholder="Search countries…"
+        autoComplete="off"
+        onFocus={() => setOpen(true)}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true); setHighlight(0); }}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown") { e.preventDefault(); setHighlight((h) => Math.min(h + 1, shown.length - 1)); }
+          else if (e.key === "ArrowUp") { e.preventDefault(); setHighlight((h) => Math.max(h - 1, 0)); }
+          else if (e.key === "Enter" && open && shown[highlight]) { e.preventDefault(); pick(shown[highlight].name); }
+          else if (e.key === "Escape") { setOpen(false); setQuery(value); }
+        }}
+        onBlur={() => {
+          // Delay so a tap on a list item lands before we close.
+          window.setTimeout(() => {
+            setOpen(false);
+            setQuery((q) => (countryByName(q) ? q : value));
+          }, 150);
+        }}
+      />
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onMouseDown={(e) => { e.preventDefault(); setOpen(false); setQuery(value); }} />
+          <ul
+            id="b-country-list"
+            ref={listRef}
+            role="listbox"
+            className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-[var(--border)] bg-[var(--surface)] py-1 shadow-xl"
+          >
+            {shown.length === 0 && (
+              <li className="px-3 py-2 text-sm text-[var(--dim)]">No country matches that name.</li>
+            )}
+            {shown.map((c, i) => (
+              <li key={c.code} role="option" aria-selected={c.name === value}>
+                <button
+                  type="button"
+                  className={`block w-full px-3 py-2 text-left text-sm ${i === highlight ? "bg-[var(--surface-alt)]" : ""} ${c.name === value ? "font-bold text-[var(--accent)]" : ""}`}
+                  onMouseDown={(e) => { e.preventDefault(); pick(c.name); }}
+                  onMouseEnter={() => setHighlight(i)}
+                >
+                  {c.name}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* Sponsorship classification shown on a brand card. The label is
+   the honest evidence category — never a promise the brand will
+   pay. */
+const CLASSIFICATION_META: Record<string, { label: string; cls: string }> = {
+  verified_paid: { label: "Verified Paid Collaborations", cls: "bg-[var(--accent)] text-[var(--accent-ink)]" },
+  active_program: { label: "Active Paid Creator Program", cls: "bg-[var(--violet)] text-white" },
+  international_paid: { label: "International Paid Partnership", cls: "bg-[#38bdf8] text-black" },
+  potential: { label: "Potential Partnership", cls: "bg-[var(--surface-alt)] text-[var(--text)]" },
+  affiliate_only: { label: "Affiliate Only", cls: "bg-[var(--amber)] text-black" },
+};
+
+function classificationMeta(classification: string | null): { label: string; cls: string } {
+  return CLASSIFICATION_META[classification ?? ""] ?? CLASSIFICATION_META.potential;
+}
+
 function BrandsTab({ data, userId, accessToken, invalidate, goDeals, onDealAdded }: { data: Dash; userId: string; accessToken?: string; invalidate: () => void; goDeals: () => void; onDealAdded?: (dealId: number) => void }) {
   const reduce = useReducedMotion();
   const [niche, setNiche] = useState("Tech");
-  const [country, setCountry] = useState("India");
+  const [country, setCountry] = useState(() => readSavedBrandCountry());
   const [msg, setMsg] = useState("");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -2628,7 +2744,8 @@ function BrandsTab({ data, userId, accessToken, invalidate, goDeals, onDealAdded
   const dealFor = (brandName: string) =>
     dealByBrand.get(brandName.trim().toLowerCase()) ?? null;
 
-  const suggestions = data.brands.filter((b) => b.isSuggestion);
+  const suggestions = data.brands.filter((b) => b.isSuggestion && !b.isAgency);
+  const agencies = data.brands.filter((b) => b.isSuggestion && b.isAgency);
   const mine = data.brands.filter((b) => !b.isSuggestion);
 
   return (
@@ -2640,9 +2757,9 @@ function BrandsTab({ data, userId, accessToken, invalidate, goDeals, onDealAdded
       />
       <section aria-label="Find brands">
         <SectionTitle right={<span className="flex-none whitespace-nowrap rounded-full bg-[var(--violet)] px-2.5 py-1 text-xs font-bold text-[var(--accent-ink)]">PRO</span>}>Brand finder</SectionTitle>
-        <p className="mt-1 text-sm text-[var(--dim)]">Live web search for brands in your niche. You pick who enters your pipeline — nothing is contacted without you.</p>
+        <p className="mt-1 text-sm text-[var(--dim)]">Live web search for brands that actually pay creators in your market — including international brands that sponsor creators from {country}. Verified paid brands are listed first. You pick who enters your pipeline — nothing is contacted without you.</p>
         <form
-          className="mt-3 grid grid-cols-2 gap-3"
+          className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2"
           onSubmit={(e) => { e.preventDefault(); discoverMut.mutate(); }}
         >
           <div>
@@ -2652,10 +2769,10 @@ function BrandsTab({ data, userId, accessToken, invalidate, goDeals, onDealAdded
             </select>
           </div>
           <div>
-            <label className={labelCls} htmlFor="b-country">Country</label>
-            <input id="b-country" className={inputCls} value={country} onChange={(e) => setCountry(e.target.value)} />
+            <label className={labelCls} htmlFor="b-country">Creator / Audience Market</label>
+            <CountrySelect value={country} onChange={setCountry} />
           </div>
-          <button type="submit" className={btnPrimary + " col-span-2"} disabled={discoverMut.isPending || niche.trim().length < 2}>
+          <button type="submit" className={btnPrimary + " sm:col-span-2"} disabled={discoverMut.isPending || niche.trim().length < 2}>
             {discoverMut.isPending
               ? <span className="inline-flex items-center gap-2"><Spinner /> Searching — results are coming…</span>
               : "Search for brands"}
@@ -2684,24 +2801,89 @@ function BrandsTab({ data, userId, accessToken, invalidate, goDeals, onDealAdded
       {suggestions.length > 0 && (
         <section aria-label="Brand suggestions">
           <SectionTitle>Suggestions to review</SectionTitle>
+          <p className="mt-1 text-sm text-[var(--dim)]">Brands are ranked by the strength of their paid sponsorship evidence. A listing is not a promise the brand will accept your proposal.</p>
           <ul className="mt-3 space-y-3">
-            {suggestions.map((b, i) => (
+            {suggestions.map((b, i) => {
+              const meta = classificationMeta(b.classification);
+              const ev = b.evidence;
+              return (
+                <motion.li key={b.id} {...itemAnim(i, reduce)} className="card p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <p className="font-display text-lg font-bold [overflow-wrap:anywhere]">{b.name}</p>
+                    <span className={`flex-none whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-bold ${meta.cls}`}>{meta.label}</span>
+                  </div>
+                  {(b.industry || b.hqCountry || b.creatorMarket) && (
+                    <p className="mt-0.5 text-sm text-[var(--dim)]">
+                      {[b.industry, b.hqCountry ? `Headquarters: ${b.hqCountry}` : null, b.creatorMarket ? `Creator market: ${b.creatorMarket}` : null].filter(Boolean).join(" · ")}
+                    </p>
+                  )}
+                  {ev?.evidence && (
+                    <p className="mt-2 text-sm leading-relaxed">
+                      <span className="font-semibold">Sponsorship evidence: </span>{ev.evidence}
+                    </p>
+                  )}
+                  {(ev?.exampleCreator || ev?.platform || ev?.evidenceDate) && (
+                    <p className="mt-1 text-sm text-[var(--dim)]">
+                      {[ev.exampleCreator, ev.platform, ev.evidenceDate].filter(Boolean).join(" · ")}
+                    </p>
+                  )}
+                  {b.contactEmail && (
+                    <p className="mt-1 text-sm">
+                      Contact: <a href={`mailto:${b.contactEmail}`} className="font-medium text-[var(--accent)] underline">{b.contactEmail}</a>
+                    </p>
+                  )}
+                  {b.notes && <p className="mt-1 line-clamp-3 text-sm text-[var(--dim)]">{b.notes}</p>}
+                  <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm font-medium">
+                    {b.website && (
+                      <a href={b.website} target="_blank" rel="noreferrer" className="text-[var(--accent)] underline">Visit Official Website</a>
+                    )}
+                    {ev?.evidenceUrl && (
+                      <a href={ev.evidenceUrl} target="_blank" rel="noreferrer" className="text-[var(--accent)] underline">View Sponsorship Evidence</a>
+                    )}
+                    {ev?.partnershipUrl && (
+                      <a href={ev.partnershipUrl} target="_blank" rel="noreferrer" className="text-[var(--accent)] underline">View Partnership Page</a>
+                    )}
+                    {b.sourceUrl && !ev?.evidenceUrl && (
+                      <a href={b.sourceUrl} target="_blank" rel="noreferrer" className="max-w-full truncate text-[var(--accent)] underline">{b.sourceUrl}</a>
+                    )}
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {dealFor(b.name) ? (
+                      <button type="button" className={btnPrimary} onClick={() => goDeals()}>
+                        Open Deal
+                      </button>
+                    ) : (
+                      <button type="button" className={btnPrimary} disabled={dealMut.isPending} onClick={() => dealMut.mutate(b)}>
+                        {dealMut.isPending ? "Adding…" : "Add to Deals"}
+                      </button>
+                    )}
+                    <button type="button" className={btnGhost} onClick={() => api.deleteBrand({ userId, accessToken, id: b.id }).then(invalidate)}>Dismiss</button>
+                  </div>
+                </motion.li>
+              );
+            })}
+          </ul>
+        </section>
+      )}
+
+      {agencies.length > 0 && (
+        <section aria-label="Creator agencies and marketplaces">
+          <SectionTitle>Creator Agencies &amp; Marketplaces</SectionTitle>
+          <p className="mt-1 text-sm text-[var(--dim)]">These are agencies and platforms that connect creators with brands — not direct brand sponsorships. They are listed separately on purpose.</p>
+          <ul className="mt-3 space-y-3">
+            {agencies.map((b, i) => (
               <motion.li key={b.id} {...itemAnim(i, reduce)} className="card p-4">
                 <p className="font-display text-lg font-bold [overflow-wrap:anywhere]">{b.name}</p>
                 {b.notes && <p className="mt-0.5 line-clamp-3 text-sm text-[var(--dim)]">{b.notes}</p>}
-                {b.sourceUrl && (
-                  <a href={b.sourceUrl} target="_blank" rel="noreferrer" className="mt-1 inline-block max-w-full truncate align-bottom text-sm font-medium text-[var(--accent)] underline">{b.sourceUrl}</a>
-                )}
-                <div className="mt-3 flex flex-wrap gap-2">
-                  {dealFor(b.name) ? (
-                    <button type="button" className={btnPrimary} onClick={() => goDeals()}>
-                      Open Deal
-                    </button>
-                  ) : (
-                    <button type="button" className={btnPrimary} disabled={dealMut.isPending} onClick={() => dealMut.mutate(b)}>
-                      {dealMut.isPending ? "Adding…" : "Add to Deals"}
-                    </button>
+                <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm font-medium">
+                  {b.website && (
+                    <a href={b.website} target="_blank" rel="noreferrer" className="text-[var(--accent)] underline">Visit Website</a>
                   )}
+                  {b.sourceUrl && (
+                    <a href={b.sourceUrl} target="_blank" rel="noreferrer" className="max-w-full truncate text-[var(--accent)] underline">{b.sourceUrl}</a>
+                  )}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
                   <button type="button" className={btnGhost} onClick={() => api.deleteBrand({ userId, accessToken, id: b.id }).then(invalidate)}>Dismiss</button>
                 </div>
               </motion.li>
@@ -3553,6 +3735,39 @@ function DealCard({ deal, data, userId, accessToken, invalidate, index = 0, auto
       )}
       {sendMsg && <p className="mt-3 text-sm text-[var(--dim)]" role="status">{sendMsg}</p>}
       {needsGmailGrant && <GmailGrantPanel />}
+      {deal.research?.sponsorship && (deal.research.sponsorship.evidence || deal.research.sponsorship.classification) && (
+        <div className="mt-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <p className="text-sm font-bold">Why this brand</p>
+            {deal.research.sponsorship.classification && (
+              <span className={`whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-bold ${classificationMeta(deal.research.sponsorship.classification).cls}`}>
+                {classificationMeta(deal.research.sponsorship.classification).label}
+              </span>
+            )}
+          </div>
+          {(deal.research.sponsorship.hqCountry || deal.research.sponsorship.industry || deal.research.sponsorship.creatorMarket) && (
+            <p className="mt-1 text-sm text-[var(--dim)]">
+              {[deal.research.sponsorship.industry, deal.research.sponsorship.hqCountry ? `Headquarters: ${deal.research.sponsorship.hqCountry}` : null, deal.research.sponsorship.creatorMarket ? `Creator market: ${deal.research.sponsorship.creatorMarket}` : null].filter(Boolean).join(" · ")}
+            </p>
+          )}
+          {deal.research.sponsorship.evidence && (
+            <p className="mt-1.5 text-sm leading-relaxed">{deal.research.sponsorship.evidence}</p>
+          )}
+          {(deal.research.sponsorship.exampleCreator || deal.research.sponsorship.platform || deal.research.sponsorship.evidenceDate) && (
+            <p className="mt-1 text-sm text-[var(--dim)]">
+              {[deal.research.sponsorship.exampleCreator, deal.research.sponsorship.platform, deal.research.sponsorship.evidenceDate].filter(Boolean).join(" · ")}
+            </p>
+          )}
+          <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm font-medium">
+            {deal.research.sponsorship.evidenceUrl && (
+              <a href={deal.research.sponsorship.evidenceUrl} target="_blank" rel="noreferrer" className="text-[var(--accent)] underline">View Sponsorship Evidence</a>
+            )}
+            {deal.research.sponsorship.partnershipUrl && (
+              <a href={deal.research.sponsorship.partnershipUrl} target="_blank" rel="noreferrer" className="text-[var(--accent)] underline">View Partnership Page</a>
+            )}
+          </div>
+        </div>
+      )}
       <BrandResearchSection deal={deal} userId={userId} accessToken={accessToken} invalidate={invalidate} autoResearch={autoResearch} onAutoResearchDone={onAutoResearchDone} />
       <DealConversationSection deal={deal} userId={userId} accessToken={accessToken} invalidate={invalidate} />
     </motion.li>

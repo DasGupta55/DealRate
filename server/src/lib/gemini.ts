@@ -16,6 +16,7 @@ export async function chatGemini(
   apiKey: string,
   system: string,
   prompt: string,
+  opts?: { maxTokens?: number },
 ): Promise<string> {
   if (!apiKey) {
     throw new Error("AI generation isn't configured yet.");
@@ -34,7 +35,7 @@ export async function chatGemini(
         contents: [{ parts: [{ text: prompt }] }],
         generationConfig: {
           responseMimeType: "application/json",
-          maxOutputTokens: MAX_TOKENS,
+          maxOutputTokens: opts?.maxTokens ?? MAX_TOKENS,
         },
       }),
       signal: AbortSignal.timeout(60000),
@@ -62,8 +63,9 @@ export async function chatGeminiJson<T>(
   apiKey: string,
   system: string,
   prompt: string,
+  opts?: { maxTokens?: number },
 ): Promise<T> {
-  const text = await chatGemini(apiKey, system, prompt);
+  const text = await chatGemini(apiKey, system, prompt, { maxTokens: opts?.maxTokens });
   const cleaned = text
     .trim()
     .replace(/^```(?:json)?\s*/i, "")

@@ -16,7 +16,7 @@ export async function chatGroq(
   apiKey: string,
   system: string,
   prompt: string,
-  opts?: { json?: boolean },
+  opts?: { json?: boolean; maxTokens?: number },
 ): Promise<string> {
   if (!apiKey) {
     throw new Error("AI generation isn't configured yet.");
@@ -37,7 +37,7 @@ export async function chatGroq(
           { role: "system", content: system },
           { role: "user", content: prompt },
         ],
-        max_tokens: MAX_TOKENS,
+        max_tokens: opts?.maxTokens ?? MAX_TOKENS,
         ...(opts?.json
           ? { response_format: { type: "json_object" } }
           : {}),
@@ -66,8 +66,9 @@ export async function chatGroqJson<T>(
   apiKey: string,
   system: string,
   prompt: string,
+  opts?: { maxTokens?: number },
 ): Promise<T> {
-  const text = await chatGroq(apiKey, system, prompt, { json: true });
+  const text = await chatGroq(apiKey, system, prompt, { json: true, maxTokens: opts?.maxTokens });
   const cleaned = text
     .trim()
     .replace(/^```(?:json)?\s*/i, "")

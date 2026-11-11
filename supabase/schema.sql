@@ -96,6 +96,12 @@ create table brands (
   source_url text,
   notes text,
   is_suggestion boolean not null default false,
+  hq_country text,
+  classification text,
+  creator_market text,
+  industry text,
+  evidence_json jsonb,
+  is_agency boolean not null default false,
   created_at timestamptz not null default now()
 );
 

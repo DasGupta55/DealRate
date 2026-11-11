@@ -82,6 +82,19 @@ export interface BrandOut {
   sourceUrl: string | null;
   notes: string | null;
   isSuggestion: boolean;
+  hqCountry: string | null;
+  classification: string | null;
+  creatorMarket: string | null;
+  industry: string | null;
+  evidence: {
+    evidence: string | null;
+    exampleCreator: string | null;
+    platform: string | null;
+    evidenceDate: string | null;
+    evidenceUrl: string | null;
+    partnershipUrl: string | null;
+  } | null;
+  isAgency: boolean;
 }
 
 // AI Brand Research — one short, sourced finding per topic. A field is
@@ -102,6 +115,21 @@ export interface BrandResearch {
   contacts: BrandContact[];
   phones: BrandPhone[];
   contactPageUrl: string | null;
+  /** Sponsorship evidence carried over from the Brand Finder result
+   *  that created this deal — HQ country, classification, creator
+   *  market and the evidence behind it. */
+  sponsorship?: {
+    hqCountry: string | null;
+    classification: string | null;
+    creatorMarket: string | null;
+    industry: string | null;
+    evidence: string | null;
+    exampleCreator: string | null;
+    platform: string | null;
+    evidenceDate: string | null;
+    evidenceUrl: string | null;
+    partnershipUrl: string | null;
+  } | null;
 }
 
 /** One publicly listed brand contact, discovered by research. */
@@ -243,6 +271,14 @@ export function toCalcOut(r: CalculationRow): CalcOut {
 }
 
 export function toBrandOut(r: BrandRow): BrandOut {
+  const ev = (r.evidence_json ?? null) as {
+    evidence?: string | null;
+    exampleCreator?: string | null;
+    platform?: string | null;
+    evidenceDate?: string | null;
+    evidenceUrl?: string | null;
+    partnershipUrl?: string | null;
+  } | null;
   return {
     id: r.id,
     name: r.name,
@@ -252,6 +288,21 @@ export function toBrandOut(r: BrandRow): BrandOut {
     sourceUrl: r.source_url,
     notes: r.notes,
     isSuggestion: r.is_suggestion === true,
+    hqCountry: r.hq_country ?? null,
+    classification: r.classification ?? null,
+    creatorMarket: r.creator_market ?? null,
+    industry: r.industry ?? null,
+    evidence: ev
+      ? {
+          evidence: ev.evidence ?? null,
+          exampleCreator: ev.exampleCreator ?? null,
+          platform: ev.platform ?? null,
+          evidenceDate: ev.evidenceDate ?? null,
+          evidenceUrl: ev.evidenceUrl ?? null,
+          partnershipUrl: ev.partnershipUrl ?? null,
+        }
+      : null,
+    isAgency: r.is_agency === true,
   };
 }
 

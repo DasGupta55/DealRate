@@ -2,8 +2,7 @@
 
 import { z } from "zod";
 import { requireProPlan, requireVerifiedUser } from "../lib/auth";
-import { chatAiJson } from "../lib/ai";
-import { searchTavily } from "../lib/tavily";
+import { discoverSponsorshipBrands } from "../lib/sponsorship";
 import {
   dbThrow,
   requireDb,
@@ -20,6 +19,12 @@ export const discoverBrandsSchema = z.object({
   country: z.string().min(2),
 });
 
+/** A search is cached for 24 hours: if the creator already has
+ *  suggestions for this exact niche + market from a recent search,
+ *  return those instead of spending Tavily and AI calls again.
+ *  Dismissed brands are deleted, so they never come back. */
+const SEARCH_CACHE_HOURS = 24;
+
 export async function discoverBrands(
   ctx: ActionCtx,
   args: z.infer<typeof discoverBrandsSchema>,
@@ -27,60 +32,30 @@ export async function discoverBrands(
   const db = requireDb(ctx);
   await requireVerifiedUser(ctx, args.userId, args.accessToken);
   await requireProPlan(ctx, args.userId);
-  let results = await searchTavily(
-    ctx.env.tavilyApiKey ?? "",
-    `brands influencer marketing creator partnership program ${args.niche} creators ${args.country} apply`,
-  );
-  // If the first query comes back empty, retry once with a simpler query
-  // before giving up — a keyword-stuffed query can return nothing even
-  // when good matches exist.
-  if (results.length === 0) {
-    results = await searchTavily(
-      ctx.env.tavilyApiKey ?? "",
-      `${args.niche} brands influencer partnership ${args.country}`,
-    );
+  const niche = args.niche.trim();
+  const country = args.country.trim();
+
+  // Cached results first — same niche + market searched recently.
+  const cacheCutoff = new Date(
+    Date.now() - SEARCH_CACHE_HOURS * 60 * 60 * 1000,
+  ).toISOString();
+  const { data: cachedData } = await db
+    .from("brands")
+    .select("id")
+    .eq("owner_id", args.userId)
+    .eq("is_suggestion", true)
+    .eq("niche", niche)
+    .eq("creator_market", country)
+    .gte("created_at", cacheCutoff)
+    .limit(1);
+  if ((cachedData ?? []).length > 0) {
+    return {
+      found: 0,
+      message: `Showing your recent ${niche} results for ${country} — search again tomorrow for fresh ones.`,
+    };
   }
-  const top = results.slice(0, 10);
-  type Suggestion = { name: string; why: string; sourceUrl: string | null };
-  let suggestions: Suggestion[] = [];
-  try {
-    const distilled = await chatAiJson<{
-      brands: {
-        name: string;
-        why?: string;
-        reason?: string;
-        sourceUrl?: string;
-        url?: string;
-      }[];
-    }>(
-      ctx.env,
-      "You extract structured data from web search results. Reply with a single JSON object only, no other text.",
-      `From these web search results, extract up to 6 real brands or creator/affiliate programs a ${args.niche} YouTube creator in ${args.country} could pitch for a paid brand deal. Use only brands actually named in the results. For each, give the brand name, one short sentence on why it fits this niche, and the result URL it came from.\n\nResults:\n${top
-        .map(
-          (r, i) =>
-            `${i + 1}. ${r.title} (web) — ${r.content ?? ""} — ${r.url ?? ""}`,
-        )
-        .join("\n")}`,
-    );
-    // The model may name the fields "reason"/"url" instead of
-    // "why"/"sourceUrl" — accept either, so notes and links save.
-    suggestions = (distilled.brands ?? []).map((b) => ({
-      name: b.name,
-      why: b.why ?? b.reason ?? "",
-      sourceUrl: b.sourceUrl ?? b.url ?? null,
-    }));
-  } catch {
-    suggestions = [];
-  }
-  // Fallback: if the AI step yields nothing (empty reply or a parse
-  // failure), use the raw search sources instead of returning zero.
-  if (suggestions.length === 0) {
-    suggestions = results.slice(0, 6).map((s) => ({
-      name: s.title.slice(0, 60),
-      why: "Found in web search results for your niche.",
-      sourceUrl: s.url,
-    }));
-  }
+
+  const { discovery } = await discoverSponsorshipBrands(ctx.env, niche, country);
   const { data: existingData, error: existingError } = await db
     .from("brands")
     .select("*")
@@ -89,26 +64,66 @@ export async function discoverBrands(
   const existingNames = new Set(
     ((existingData ?? []) as BrandRow[]).map((b) => b.name.toLowerCase()),
   );
+  const existingWebsites = new Set(
+    ((existingData ?? []) as BrandRow[])
+      .map((b) => (b.website ?? "").trim().toLowerCase())
+      .filter(Boolean),
+  );
   let added = 0;
-  for (const s of suggestions) {
+  for (const s of discovery.brands) {
     if (!s.name.trim() || existingNames.has(s.name.toLowerCase())) continue;
+    const website = (s.website ?? "").trim() || null;
+    if (website && existingWebsites.has(website.toLowerCase())) continue;
     const { error } = await db.from("brands").insert({
       owner_id: args.userId,
       name: s.name.trim(),
-      niche: args.niche,
+      website,
+      niche,
       notes: s.why,
       source_url: s.sourceUrl,
       is_suggestion: true,
+      hq_country: s.hqCountry,
+      classification: s.classification,
+      creator_market: country,
+      industry: s.industry,
+      evidence_json: {
+        evidence: s.evidence,
+        exampleCreator: s.exampleCreator,
+        platform: s.platform,
+        evidenceDate: s.evidenceDate,
+        evidenceUrl: s.evidenceUrl,
+        partnershipUrl: s.partnershipUrl,
+      },
     });
     dbThrow(error, "discoverBrands insert");
     added++;
   }
+  let agenciesAdded = 0;
+  for (const a of discovery.agencies) {
+    if (!a.name.trim() || existingNames.has(a.name.toLowerCase())) continue;
+    const website = (a.website ?? "").trim() || null;
+    if (website && existingWebsites.has(website.toLowerCase())) continue;
+    const { error } = await db.from("brands").insert({
+      owner_id: args.userId,
+      name: a.name.trim(),
+      website,
+      niche,
+      notes: a.why,
+      source_url: a.sourceUrl,
+      is_suggestion: true,
+      is_agency: true,
+      creator_market: country,
+    });
+    dbThrow(error, "discoverBrands agency insert");
+    agenciesAdded++;
+  }
+  const total = added + agenciesAdded;
   return {
-    found: added,
+    found: total,
     message:
-      added > 0
-        ? `Added ${added} brand suggestions. Review them below and keep the ones you want.`
-        : "No new brands found for that search. Try a broader niche word.",
+      total > 0
+        ? `Added ${added} brand suggestion${added === 1 ? "" : "s"}${agenciesAdded > 0 ? ` and ${agenciesAdded} ${agenciesAdded === 1 ? "agency" : "agencies"}` : ""}. Review them below — verified paid brands are listed first.`
+        : "No brands with clear paid sponsorship evidence found for that search. Try a broader niche word.",
   };
 }
 
@@ -240,5 +255,56 @@ export async function addBrandToDeals(
     agreedPrice: priceMid ?? undefined,
     currency: "USD",
   });
+  // Carry the Brand Finder evidence onto the deal, so the pipeline
+  // shows why this brand was recommended and what paid activity was
+  // found — the research step then adds contacts on top of it.
+  if (!brand.is_agency) {
+    const ev = (brand.evidence_json ?? null) as {
+      evidence?: string | null;
+      exampleCreator?: string | null;
+      platform?: string | null;
+      evidenceDate?: string | null;
+      evidenceUrl?: string | null;
+      partnershipUrl?: string | null;
+    } | null;
+    const sponsorship = {
+      hqCountry: brand.hq_country ?? null,
+      classification: brand.classification ?? null,
+      creatorMarket: brand.creator_market ?? null,
+      industry: brand.industry ?? null,
+      evidence: ev?.evidence ?? null,
+      exampleCreator: ev?.exampleCreator ?? null,
+      platform: ev?.platform ?? null,
+      evidenceDate: ev?.evidenceDate ?? null,
+      evidenceUrl: ev?.evidenceUrl ?? null,
+      partnershipUrl: ev?.partnershipUrl ?? null,
+    };
+    const hasSponsorship =
+      sponsorship.hqCountry !== null ||
+      sponsorship.classification !== null ||
+      sponsorship.evidence !== null ||
+      sponsorship.partnershipUrl !== null;
+    if (hasSponsorship) {
+      const { data: dealData, error: dealReadError } = await db
+        .from("deals")
+        .select("research_json")
+        .eq("id", created.id)
+        .eq("owner_id", args.userId)
+        .limit(1)
+        .maybeSingle();
+      dbThrow(dealReadError, "addBrandToDeals read deal research");
+      const existing =
+        ((dealData as { research_json?: Record<string, unknown> } | null)
+          ?.research_json ?? {}) as Record<string, unknown>;
+      const { error: researchError } = await db
+        .from("deals")
+        .update({
+          research_json: { ...existing, sponsorship },
+        })
+        .eq("id", created.id)
+        .eq("owner_id", args.userId);
+      dbThrow(researchError, "addBrandToDeals save sponsorship");
+    }
+  }
   return { dealId: created.id, created: created.created };
 }

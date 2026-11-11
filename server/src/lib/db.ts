@@ -104,6 +104,12 @@ export interface BrandRow {
   source_url: string | null;
   notes: string | null;
   is_suggestion: boolean;
+  hq_country: string | null;
+  classification: string | null;
+  creator_market: string | null;
+  industry: string | null;
+  evidence_json: Record<string, unknown> | null;
+  is_agency: boolean;
   created_at: string;
 }
 
