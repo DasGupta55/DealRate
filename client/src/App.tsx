@@ -1696,8 +1696,10 @@ export function App() {
   const inrRate = displayData.inrRate;
   const overdueCount = data?.invoices.filter((i) => i.daysOverdue > 0 && i.status !== "paid").length ?? 0;
 
-  /* The Owner tab exists only for the owner's own Google sign-in.
-     Any other email — or no sign-in — never gets the tab at all. */
+  /* The Owner Console exists only for the owner's own Google sign-in,
+     reached from the profile dropdown. Any other email — or no
+     sign-in — never sees it, and the server re-checks the verified
+     email on every owner action. */
   const isOwner = !!userEmail && userEmail.toLowerCase() === OWNER_EMAIL.toLowerCase();
 
   const tabs: { key: typeof tab; label: string; ariaLabel: string; icon: () => ReactNode; badge?: number }[] = [
@@ -1706,7 +1708,6 @@ export function App() {
     { key: "deals", label: "Deals", ariaLabel: "Deals", icon: IconDeals, badge: data?.deals.length || undefined },
     { key: "invoices", label: "Invoices", ariaLabel: "Invoices", icon: IconReceipt, badge: overdueCount || undefined },
     { key: "plan", label: "Plan", ariaLabel: "Plan", icon: IconCrown },
-    ...(isOwner ? [{ key: "owner" as const, label: "Owner", ariaLabel: "Owner settings", icon: IconLock }] : []),
   ];
 
   /* Profile-menu plan line: Pro with its renewal date when the
@@ -1745,7 +1746,7 @@ export function App() {
   }, []);
 
   // If the owner signs out (or another account signs in) while the
-  // Owner tab is open, leave it immediately — it must never linger.
+  // Owner page is open, leave it immediately — it must never linger.
   useEffect(() => {
     if (tab === "owner" && !isOwner) setTab("plan");
   }, [tab, isOwner]);
@@ -1860,6 +1861,17 @@ export function App() {
                             <span className="flex-none text-[var(--dim)]"><IconCrown /></span>
                             Manage subscription
                           </button>
+                          {isOwner && (
+                            <button
+                              type="button"
+                              role="menuitem"
+                              className="btn-press flex min-h-[44px] w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold transition-colors hover:bg-[var(--surface-alt)]"
+                              onClick={() => { setProfileMenuOpen(false); setTab("owner"); }}
+                            >
+                              <span className="flex-none text-[var(--dim)]"><IconLock /></span>
+                              Owner Console
+                            </button>
+                          )}
                         </div>
                         <div className="border-t border-[var(--border)] pt-1.5">
                           <button
@@ -2061,7 +2073,7 @@ export function App() {
       </main>
 
       <nav aria-label="Main sections" className="glass-nav fixed inset-x-0 bottom-0 border-t border-[var(--border)] pb-safe">
-        <div className={`mx-auto grid max-w-3xl px-1 pt-1 ${tabs.length > 5 ? "grid-cols-6" : "grid-cols-5"}`}>
+        <div className="mx-auto grid max-w-3xl grid-cols-5 px-1 pt-1">
           {tabs.map((t) => {
             const TabIcon = t.icon;
             const active = tab === t.key;
