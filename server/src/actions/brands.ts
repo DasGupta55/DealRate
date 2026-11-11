@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { requireProPlan, requireVerifiedUser } from "../lib/auth";
-import { chatGroqJson } from "../lib/groq";
+import { chatAiJson } from "../lib/ai";
 import { searchTavily } from "../lib/tavily";
 import {
   dbThrow,
@@ -44,7 +44,7 @@ export async function discoverBrands(
   type Suggestion = { name: string; why: string; sourceUrl: string | null };
   let suggestions: Suggestion[] = [];
   try {
-    const distilled = await chatGroqJson<{
+    const distilled = await chatAiJson<{
       brands: {
         name: string;
         why?: string;
@@ -53,7 +53,7 @@ export async function discoverBrands(
         url?: string;
       }[];
     }>(
-      ctx.env.groqApiKey ?? "",
+      ctx.env,
       "You extract structured data from web search results. Reply with a single JSON object only, no other text.",
       `From these web search results, extract up to 6 real brands or creator/affiliate programs a ${args.niche} YouTube creator in ${args.country} could pitch for a paid brand deal. Use only brands actually named in the results. For each, give the brand name, one short sentence on why it fits this niche, and the result URL it came from.\n\nResults:\n${top
         .map(

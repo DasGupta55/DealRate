@@ -12,6 +12,7 @@ export interface Env {
   youtubeApiKey?: string;
   tavilyApiKey?: string;
   groqApiKey?: string;
+  geminiApiKey?: string;
   razorpayKeyId?: string;
   razorpayKeySecret?: string;
   razorpayWebhookSecret?: string;
@@ -37,6 +38,7 @@ export function loadEnv(): Env {
     youtubeApiKey: clean(e.YOUTUBE_API_KEY),
     tavilyApiKey: clean(e.TAVILY_API_KEY),
     groqApiKey: clean(e.GROQ_API_KEY),
+    geminiApiKey: clean(e.GEMINI_API_KEY),
     razorpayKeyId: clean(e.RAZORPAY_KEY_ID),
     razorpayKeySecret: clean(e.RAZORPAY_KEY_SECRET),
     razorpayWebhookSecret: clean(e.RAZORPAY_WEBHOOK_SECRET),

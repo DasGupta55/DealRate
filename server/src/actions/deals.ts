@@ -13,7 +13,7 @@ import {
   isGmailAuthError,
   sendGmailMessage,
 } from "../lib/gmail";
-import { chatGroqJson } from "../lib/groq";
+import { chatAiJson } from "../lib/ai";
 import {
   dbThrow,
   requireDb,
@@ -365,8 +365,8 @@ export async function generatePitch(
     const brandContext = brandDetail
       ? `Product/campaign detail from the saved brand: ${brandDetail}.`
       : "No product detail supplied — keep the relevance line to the creator's niche and audience.";
-    const ai = await chatGroqJson<{ subject: string; body: string }>(
-      ctx.env.groqApiKey ?? "",
+    const ai = await chatAiJson<{ subject: string; body: string }>(
+      ctx.env,
       "You write brand outreach emails from a real YouTube creator to a brand. Reply with a single JSON object {subject, body} only — no other text, no explanations.",
       [
         `Write one outreach email, 80–130 words, that sounds personally written by the creator after researching the brand. Specific, confident, human. No hype, no jargon, no emojis.`,

@@ -21,7 +21,7 @@ import {
   type BrandRow,
   type DealRow,
 } from "../lib/db";
-import { chatGroqJson } from "../lib/groq";
+import { chatAiJson } from "../lib/ai";
 import { searchTavily, type TavilyResult } from "../lib/tavily";
 import {
   userIdArg,
@@ -180,8 +180,8 @@ export async function researchBrand(
     })
     .slice(0, 8);
 
-  const distilled = await chatGroqJson<ResearchJson>(
-    ctx.env.groqApiKey ?? "",
+  const distilled = await chatAiJson<ResearchJson>(
+    ctx.env,
     "You research a company from web search results. Reply with a single JSON object only — no other text, no explanations.",
     [
       `Research the company "${name}" using ONLY the web search results below. Prioritize its official website and official pages over third-party articles.`,
