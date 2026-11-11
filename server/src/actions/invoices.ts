@@ -81,14 +81,9 @@ export async function createInvoice(
     .single();
   dbThrow(error, "createInvoice insert");
   if (!data) throw new Error("createInvoice: insert returned no rows");
-  if (args.dealId) {
-    const { error: dealError } = await db
-      .from("deals")
-      .update({ stage: "invoiced" })
-      .eq("id", args.dealId)
-      .eq("owner_id", args.userId);
-    dbThrow(dealError, "createInvoice deal stage");
-  }
+  // The deal stage does NOT move here: a draft invoice is not an
+  // invoiced deal. sendInvoice moves it to Invoiced when the invoice
+  // is actually sent, and updateInvoiceStatus moves it to Paid.
   return { id: (data as { id: number }).id, invoiceNumber: num };
 }
 
@@ -108,7 +103,10 @@ export async function updateInvoiceStatus(
   await requireProPlan(ctx, args.userId);
   const { error } = await db
     .from("invoices")
-    .update({ status: args.status })
+    .update({
+      status: args.status,
+      ...(args.status === "paid" ? { paid_at: new Date().toISOString() } : {}),
+    })
     .eq("id", args.id)
     .eq("owner_id", args.userId);
   dbThrow(error, "updateInvoiceStatus");
@@ -429,10 +427,18 @@ export async function sendInvoice(
   }
   const { error: updateError } = await db
     .from("invoices")
-    .update({ status: "sent" })
+    .update({ status: "sent", sent_at: new Date().toISOString() })
     .eq("id", args.invoiceId)
     .eq("owner_id", args.userId);
   dbThrow(updateError, "sendInvoice update");
+  // A sent invoice moves its deal to Invoiced.
+  if (inv.deal_id) {
+    await db
+      .from("deals")
+      .update({ stage: "invoiced" })
+      .eq("id", inv.deal_id)
+      .eq("owner_id", args.userId);
+  }
   const { error: insertError } = await db.from("reminders").insert({
     owner_id: args.userId,
     from_email: verified.email,

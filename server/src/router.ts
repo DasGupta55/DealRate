@@ -14,7 +14,7 @@
 import { ZodError } from "zod";
 import { Actions, ActionSchemas } from "./actions";
 import { handleRazorpayWebhookRequest } from "./webhook";
-import { handleCronRequest } from "./cron";
+import { handleCronRequest, handleGmailSyncRequest } from "./cron";
 import { loadEnv, type Env } from "./lib/env";
 import { createServiceClient, type ActionCtx } from "./lib/db";
 import { HttpError } from "./lib/errors";
@@ -80,6 +80,9 @@ export async function handleApiRequest(req: Request): Promise<Response> {
     }
     if (pathname === "/api/cron/overdue") {
       return await handleCronRequest(req);
+    }
+    if (pathname === "/api/cron/gmail-sync") {
+      return await handleGmailSyncRequest(req);
     }
     const match = pathname.match(/^\/api\/([A-Za-z0-9]+)$/);
     if (!match) {

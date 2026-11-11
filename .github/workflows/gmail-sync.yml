@@ -1,0 +1,28 @@
+# GitHub Actions secrets required (add under repo Settings -> Secrets and variables -> Actions):
+#   PUBLIC_URL   — the public base URL of the deployed site, e.g. https://dealrate.netlify.app
+#                  (no trailing slash). The workflow POSTs to $PUBLIC_URL/api/cron/gmail-sync.
+#   CRON_SECRET  — the shared secret for the cron endpoints. Must match the
+#                  CRON_SECRET env var set in the Netlify dashboard for the site.
+#                  Generate a long random value; never commit it here.
+#                  (Same secret as the overdue-check workflow.)
+name: Gmail reply sync
+
+on:
+  schedule:
+    # Every 30 minutes — frequent enough that a brand reply shows up
+    # the same morning, light enough to stay inside Gmail's free quota.
+    - cron: '*/30 * * * *'
+  workflow_dispatch: {}
+
+jobs:
+  gmail-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Run Gmail reply sync
+        run: |
+          curl --fail-with-body --max-time 120 \
+            -X POST "$PUBLIC_URL/api/cron/gmail-sync" \
+            -H "x-cron-secret: <redacted>
+        env:
+          PUBLIC_URL: ${{ secrets.PUBLIC_URL }}
+          CRON_SECRET: <redacted>

@@ -108,13 +108,15 @@ create table deals (
   brand_name text not null,
   brand_email text,
   stage text not null default 'prospect'
-    check (stage in ('prospect', 'pitch_ready', 'pitched', 'negotiating', 'approved', 'content_live', 'invoiced', 'paid', 'lost')),
+    check (stage in ('prospect', 'pitch_ready', 'pitched', 'reply_received', 'negotiating', 'approved', 'content_production', 'content_submitted', 'invoiced', 'paid', 'lost')),
   deliverable text not null default 'dedicated',
   agreed_price double precision,
   currency text not null default 'USD',
   pitch_subject text,
   pitch_body text,
   pitch_sent_at timestamptz,
+  pitch_gmail_message_id text,
+  pitch_gmail_thread_id text,
   notes text,
   research_json jsonb,
   research_checked_at timestamptz,
@@ -160,6 +162,97 @@ create table invoices (
     check (status in ('draft', 'sent', 'paid', 'overdue')),
   reminder_count integer not null default 0,
   last_reminder_at timestamptz,
+  sent_at timestamptz,
+  paid_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+-- ------------------------------------------------------------------
+-- deal_messages: every email in a deal's conversation (the pitch sent
+-- from DealRate plus each brand reply), deduped by gmail_message_id.
+-- ------------------------------------------------------------------
+create table deal_messages (
+  id bigint generated always as identity primary key,
+  owner_id text,
+  deal_id bigint not null references deals(id) on delete cascade,
+  gmail_message_id text not null,
+  gmail_thread_id text,
+  direction text not null check (direction in ('inbound', 'outbound')),
+  from_email text,
+  to_email text,
+  subject text,
+  body_text text,
+  received_at timestamptz,
+  classification text,
+  ai_summary text,
+  stated_price double precision,
+  deliverables text,
+  conditions text,
+  created_at timestamptz not null default now(),
+  unique (owner_id, gmail_message_id)
+);
+
+-- ------------------------------------------------------------------
+-- gmail_tokens: the creator's encrypted Google refresh token so the
+-- scheduled sync can read their inbox in the background. AES-256-GCM;
+-- the key is the Netlify env var TOKEN_ENCRYPTION_KEY. The plaintext
+-- token is never stored.
+-- ------------------------------------------------------------------
+create table gmail_tokens (
+  owner_id text primary key,
+  email text,
+  encrypted_refresh_token text not null,
+  scopes text,
+  invalid boolean not null default false,
+  invalid_reason text,
+  last_sync_at timestamptz,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- ------------------------------------------------------------------
+-- notifications: in-app notifications (brand replied, deal approved,
+-- invoice overdue). One row per event; never duplicated for the same
+-- underlying message.
+-- ------------------------------------------------------------------
+create table notifications (
+  id bigint generated always as identity primary key,
+  owner_id text,
+  deal_id bigint references deals(id) on delete cascade,
+  type text not null,
+  title text not null,
+  body text,
+  is_read boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+-- ------------------------------------------------------------------
+-- deal_approvals: one-click approval history per deal.
+-- ------------------------------------------------------------------
+create table deal_approvals (
+  id bigint generated always as identity primary key,
+  owner_id text,
+  deal_id bigint not null references deals(id) on delete cascade,
+  source_message_id bigint references deal_messages(id) on delete set null,
+  approved_price double precision,
+  currency text,
+  deliverables text,
+  conditions text,
+  approved_at timestamptz not null default now()
+);
+
+-- ------------------------------------------------------------------
+-- content_submissions: published content links per deal (one row per
+-- submitted link, so a multi-deliverable deal can hold several).
+-- ------------------------------------------------------------------
+create table content_submissions (
+  id bigint generated always as identity primary key,
+  owner_id text,
+  deal_id bigint not null references deals(id) on delete cascade,
+  content_url text not null,
+  platform text,
+  notes text,
+  published_at date,
   created_at timestamptz not null default now()
 );
 

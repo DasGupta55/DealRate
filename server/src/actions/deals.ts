@@ -597,8 +597,9 @@ export async function sendPitch(
       "gmail_mismatch: the Gmail token does not match the signed-in account",
     );
   }
+  let sent: { messageId: string; threadId: string | null };
   try {
-    await sendGmailMessage(args.gmailToken, {
+    sent = await sendGmailMessage(args.gmailToken, {
       to: deal.brand_email,
       subject: deal.pitch_subject,
       body: deal.pitch_body,
@@ -628,6 +629,8 @@ export async function sendPitch(
     .from("deals")
     .update({
       pitch_sent_at: new Date().toISOString(),
+      pitch_gmail_message_id: sent.messageId,
+      pitch_gmail_thread_id: sent.threadId,
       ...(deal.stage === "prospect" || deal.stage === "pitch_ready"
         ? { stage: "pitched" }
         : {}),
@@ -635,6 +638,23 @@ export async function sendPitch(
     .eq("id", args.dealId)
     .eq("owner_id", args.userId);
   dbThrow(updateError, "sendPitch update");
+  // Save the pitch as the first message of the deal's conversation,
+  // so the conversation view and the reply sync both see the thread.
+  await db.from("deal_messages").upsert(
+    {
+      owner_id: args.userId,
+      deal_id: deal.id,
+      gmail_message_id: sent.messageId,
+      gmail_thread_id: sent.threadId,
+      direction: "outbound",
+      from_email: verified.email,
+      to_email: deal.brand_email,
+      subject: deal.pitch_subject,
+      body_text: deal.pitch_body,
+      received_at: new Date().toISOString(),
+    },
+    { onConflict: "owner_id,gmail_message_id" },
+  );
   return {
     status: "sent",
     message: `Pitch sent from your Gmail (${verified.email}) to ${deal.brand_email}.`,

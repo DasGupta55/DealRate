@@ -88,6 +88,44 @@ export async function requestGmailSendScope(): Promise<void> {
   });
 }
 
+/** Gmail reply tracking permission: re-runs Google sign-in asking for
+ *  gmail.readonly (read the inbox to find brand replies) on top of
+ *  the basic profile scopes and gmail.send. access_type offline +
+ *  prompt consent make Google issue a refresh token, which the app
+ *  then stores encrypted on the server so the scheduled sync can
+ *  check the inbox in the background. The refresh token lives in the
+ *  Supabase session (provider_refresh_token); the client reads it
+ *  once after sign-in and hands it to the server — it is never shown
+ *  in the UI. */
+export async function requestGmailReadScope(): Promise<void> {
+  if (!cachedClient) return;
+  const redirectTo = `${window.location.origin}${window.location.pathname}`;
+  await cachedClient.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo,
+      scopes: "openid https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly",
+      queryParams: { access_type: "offline", prompt: "consent" },
+    },
+  });
+}
+
+/** The Google refresh token from the current Supabase session, when
+ *  one was issued (only after a sign-in with access_type offline).
+ *  Returns null when there is none — the creator has not granted
+ *  reply tracking yet. */
+export async function getGoogleProviderRefreshToken(): Promise<string | null> {
+  if (!cachedClient) return null;
+  try {
+    const { data } = await cachedClient.auth.getSession();
+    if (data.session?.provider_refresh_token) return data.session.provider_refresh_token;
+    const { data: refreshed } = await cachedClient.auth.refreshSession();
+    return refreshed.session?.provider_refresh_token ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // No-op now: @supabase/supabase-js is bundled with the app, so there is no
 // separate library download to warm up. Kept so existing callers (App.tsx)
 // need no change.

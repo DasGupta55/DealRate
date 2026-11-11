@@ -105,6 +105,42 @@ import {
   updateSettings,
   updateSettingsSchema,
 } from "./actions/settings";
+import {
+  disconnectGmail,
+  disconnectGmailSchema,
+  getGmailStatus,
+  getGmailStatusSchema,
+  saveGmailToken,
+  saveGmailTokenSchema,
+  syncGmailNow,
+  syncGmailNowSchema,
+} from "./actions/gmail";
+import {
+  approveDeal,
+  approveDealSchema,
+  createInvoiceFromDeal,
+  createInvoiceFromDealSchema,
+  generateReplyDraft,
+  generateReplyDraftSchema,
+  listContentSubmissions,
+  listContentSubmissionsSchema,
+  listDealMessages,
+  listDealMessagesSchema,
+  sendDealReply,
+  sendDealReplySchema,
+  submitContent,
+  submitContentSchema,
+  updateDealStage,
+  updateDealStageSchema,
+} from "./actions/replies";
+import {
+  listNotifications,
+  listNotificationsSchema,
+  markAllNotificationsRead,
+  markAllNotificationsReadSchema,
+  markNotificationRead,
+  markNotificationReadSchema,
+} from "./actions/notifications";
 
 export type ActionHandler = (
   ctx: ActionCtx,
@@ -157,6 +193,21 @@ export const Actions: Record<string, ActionHandler> = {
   cancelPro: asHandler(cancelPro),
   deleteAccountData: asHandler(deleteAccountData),
   updateSettings: asHandler(updateSettings),
+  saveGmailToken: asHandler(saveGmailToken),
+  getGmailStatus: asHandler(getGmailStatus),
+  disconnectGmail: asHandler(disconnectGmail),
+  syncGmailNow: asHandler(syncGmailNow),
+  listDealMessages: asHandler(listDealMessages),
+  generateReplyDraft: asHandler(generateReplyDraft),
+  sendDealReply: asHandler(sendDealReply),
+  approveDeal: asHandler(approveDeal),
+  submitContent: asHandler(submitContent),
+  listContentSubmissions: asHandler(listContentSubmissions),
+  createInvoiceFromDeal: asHandler(createInvoiceFromDeal),
+  updateDealStage: asHandler(updateDealStage),
+  listNotifications: asHandler(listNotifications),
+  markNotificationRead: asHandler(markNotificationRead),
+  markAllNotificationsRead: asHandler(markAllNotificationsRead),
 };
 
 // Precise per-action handler types for the client. The Actions record
@@ -200,6 +251,21 @@ export type ActionHandlers = {
   cancelPro: typeof cancelPro;
   deleteAccountData: typeof deleteAccountData;
   updateSettings: typeof updateSettings;
+  saveGmailToken: typeof saveGmailToken;
+  getGmailStatus: typeof getGmailStatus;
+  disconnectGmail: typeof disconnectGmail;
+  syncGmailNow: typeof syncGmailNow;
+  listDealMessages: typeof listDealMessages;
+  generateReplyDraft: typeof generateReplyDraft;
+  sendDealReply: typeof sendDealReply;
+  approveDeal: typeof approveDeal;
+  submitContent: typeof submitContent;
+  listContentSubmissions: typeof listContentSubmissions;
+  createInvoiceFromDeal: typeof createInvoiceFromDeal;
+  updateDealStage: typeof updateDealStage;
+  listNotifications: typeof listNotifications;
+  markNotificationRead: typeof markNotificationRead;
+  markAllNotificationsRead: typeof markAllNotificationsRead;
 };
 
 export const ActionSchemas: Record<string, z.ZodTypeAny> = {
@@ -238,6 +304,21 @@ export const ActionSchemas: Record<string, z.ZodTypeAny> = {
   cancelPro: cancelProSchema,
   deleteAccountData: deleteAccountDataSchema,
   updateSettings: updateSettingsSchema,
+  saveGmailToken: saveGmailTokenSchema,
+  getGmailStatus: getGmailStatusSchema,
+  disconnectGmail: disconnectGmailSchema,
+  syncGmailNow: syncGmailNowSchema,
+  listDealMessages: listDealMessagesSchema,
+  generateReplyDraft: generateReplyDraftSchema,
+  sendDealReply: sendDealReplySchema,
+  approveDeal: approveDealSchema,
+  submitContent: submitContentSchema,
+  listContentSubmissions: listContentSubmissionsSchema,
+  createInvoiceFromDeal: createInvoiceFromDealSchema,
+  updateDealStage: updateDealStageSchema,
+  listNotifications: listNotificationsSchema,
+  markNotificationRead: markNotificationReadSchema,
+  markAllNotificationsRead: markAllNotificationsReadSchema,
 };
 
 export type ActionName = keyof typeof Actions;

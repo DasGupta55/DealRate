@@ -93,12 +93,14 @@ function toBase64Url(text: string): string {
 }
 
 /** Send one plain-text email from the Gmail account the access token
- *  belongs to. Returns the Gmail message id. Throws an Error whose
- *  message starts with gmail_401 / gmail_403 / gmail_error. */
+ *  belongs to. Returns the Gmail message id and thread id — the
+ *  thread id is what the reply sync uses to find the brand's answer.
+ *  Throws an Error whose message starts with gmail_401 / gmail_403 /
+ *  gmail_error. */
 export async function sendGmailMessage(
   accessToken: string,
   msg: GmailMessage,
-): Promise<{ messageId: string }> {
+): Promise<{ messageId: string; threadId: string | null }> {
   const raw = [
     `To: ${msg.to}`,
     `Subject: ${msg.subject}`,
@@ -123,10 +125,216 @@ export async function sendGmailMessage(
     throw new Error("gmail_error: Gmail is unavailable right now. Try again.");
   }
   if (!res.ok) throw await gmailError(res, "Gmail send failed");
-  const payload = (await res.json()) as { id?: string };
+  const payload = (await res.json()) as { id?: string; threadId?: string };
   if (!payload.id)
     throw new Error("gmail_error: Gmail send returned no message id");
-  return { messageId: payload.id };
+  return { messageId: payload.id, threadId: payload.threadId ?? null };
+}
+
+// ------------------------------------------------------------------
+// Reading mail (reply tracking). These need the gmail.readonly scope,
+// granted separately from gmail.send. They are used by the scheduled
+// sync (server-held refresh token) and by a manual sync with the
+// creator's session token. Nothing here marks mail read or moves it.
+// ------------------------------------------------------------------
+
+export interface GmailHeader {
+  name: string;
+  value: string;
+}
+
+export interface GmailMessageFull {
+  id: string;
+  threadId: string;
+  from: string;
+  to: string;
+  subject: string;
+  date: string | null;
+  snippet: string;
+  bodyText: string;
+}
+
+/** Exchange a Google refresh token for a fresh access token. Throws
+ *  gmail_401 when the refresh token is revoked or expired (the
+ *  creator must reconnect Gmail); gmail_error on a network failure.
+ *  The Google OAuth client id/secret are the same ones Supabase uses
+ *  for Google sign-in, so they come from env vars the owner already
+ *  set for sign-in (GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET). When
+ *  they are absent the sync cannot refresh and reports it plainly. */
+export async function refreshGoogleAccessToken(
+  refreshToken: string,
+  clientId?: string,
+  clientSecret?: string,
+): Promise<string> {
+  if (!clientId || !clientSecret) {
+    throw new Error(
+      "gmail_error: Google sign-in credentials are not configured on the server, so the reply sync cannot refresh its Gmail access. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to Netlify env vars.",
+    );
+  }
+  let res: Response;
+  try {
+    res = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        refresh_token: refreshToken,
+        grant_type: "refresh_token",
+      }).toString(),
+      signal: AbortSignal.timeout(30000),
+    });
+  } catch {
+    throw new Error("gmail_error: Google is unavailable right now. Try again.");
+  }
+  if (!res.ok) {
+    const detail = await googleDetail(res);
+    if (res.status === 400 && /invalid_grant/i.test(detail)) {
+      throw new Error(
+        "gmail_401: Gmail permission was revoked or expired — the creator needs to reconnect Gmail.",
+      );
+    }
+    throw new Error(`gmail_${res.status}: Google token refresh failed${detail ? ` — ${detail}` : ""}`);
+  }
+  const payload = (await res.json()) as { access_token?: string };
+  if (!payload.access_token) {
+    throw new Error("gmail_error: Google token refresh returned no access token");
+  }
+  return payload.access_token;
+}
+
+function headerValue(headers: GmailHeader[], name: string): string {
+  const h = headers.find((x) => x.name.toLowerCase() === name.toLowerCase());
+  return h?.value ?? "";
+}
+
+function decodeBodyPart(part: {
+  mimeType?: string;
+  body?: { data?: string };
+  parts?: unknown[];
+}): string {
+  const data = part.body?.data;
+  if (data && /text\/plain/i.test(part.mimeType ?? "")) {
+    return Buffer.from(data.replace(/-/g, "+").replace(/_/g, "/"), "base64").toString("utf-8");
+  }
+  if (Array.isArray(part.parts)) {
+    for (const sub of part.parts as { mimeType?: string; body?: { data?: string }; parts?: unknown[] }[]) {
+      const text = decodeBodyPart(sub);
+      if (text) return text;
+    }
+  }
+  return "";
+}
+
+/** Fetch one message's headers and plain-text body. */
+export async function getGmailMessage(
+  accessToken: string,
+  messageId: string,
+): Promise<GmailMessageFull> {
+  let res: Response;
+  try {
+    res = await fetch(
+      `${GMAIL_API}/messages/${encodeURIComponent(messageId)}?format=full`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/json",
+          "User-Agent": USER_AGENT,
+        },
+        signal: AbortSignal.timeout(30000),
+      },
+    );
+  } catch {
+    throw new Error("gmail_error: Gmail is unavailable right now. Try again.");
+  }
+  if (!res.ok) throw await gmailError(res, "Gmail message read failed");
+  const payload = (await res.json()) as {
+    id?: string;
+    threadId?: string;
+    snippet?: string;
+    payload?: { headers?: GmailHeader[]; body?: { data?: string }; parts?: unknown[]; mimeType?: string };
+    internalDate?: string;
+  };
+  const headers = payload.payload?.headers ?? [];
+  let bodyText = "";
+  if (payload.payload) {
+    bodyText = decodeBodyPart(
+      payload.payload as { mimeType?: string; body?: { data?: string }; parts?: unknown[] },
+    );
+    if (!bodyText && payload.payload.body?.data) {
+      bodyText = Buffer.from(
+        payload.payload.body.data.replace(/-/g, "+").replace(/_/g, "/"),
+        "base64",
+      ).toString("utf-8");
+    }
+  }
+  const ms = payload.internalDate ? Number(payload.internalDate) : NaN;
+  return {
+    id: payload.id ?? messageId,
+    threadId: payload.threadId ?? "",
+    from: headerValue(headers, "From"),
+    to: headerValue(headers, "To"),
+    subject: headerValue(headers, "Subject"),
+    date: Number.isFinite(ms) ? new Date(ms).toISOString() : null,
+    snippet: payload.snippet ?? "",
+    bodyText: bodyText.trim(),
+  };
+}
+
+/** List the message ids in one Gmail thread (the pitch and its
+ *  replies), oldest first. */
+export async function listThreadMessageIds(
+  accessToken: string,
+  threadId: string,
+): Promise<string[]> {
+  let res: Response;
+  try {
+    res = await fetch(
+      `${GMAIL_API}/threads/${encodeURIComponent(threadId)}?format=minimal`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/json",
+          "User-Agent": USER_AGENT,
+        },
+        signal: AbortSignal.timeout(30000),
+      },
+    );
+  } catch {
+    throw new Error("gmail_error: Gmail is unavailable right now. Try again.");
+  }
+  if (!res.ok) throw await gmailError(res, "Gmail thread read failed");
+  const payload = (await res.json()) as { messages?: { id?: string }[] };
+  return (payload.messages ?? []).map((m) => m.id ?? "").filter(Boolean);
+}
+
+/** Search the inbox for messages matching a Gmail search query
+ *  (e.g. `from:brand@example.com`). Returns message ids, newest
+ *  first, up to maxResults. */
+export async function searchGmailMessageIds(
+  accessToken: string,
+  query: string,
+  maxResults = 20,
+): Promise<string[]> {
+  let res: Response;
+  try {
+    res = await fetch(
+      `${GMAIL_API}/messages?q=${encodeURIComponent(query)}&maxResults=${maxResults}`,
+      {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: "application/json",
+          "User-Agent": USER_AGENT,
+        },
+        signal: AbortSignal.timeout(30000),
+      },
+    );
+  } catch {
+    throw new Error("gmail_error: Gmail is unavailable right now. Try again.");
+  }
+  if (!res.ok) throw await gmailError(res, "Gmail search failed");
+  const payload = (await res.json()) as { messages?: { id?: string }[] };
+  return (payload.messages ?? []).map((m) => m.id ?? "").filter(Boolean);
 }
 
 /** User-facing message for a Gmail auth failure, naming the actual

@@ -5,7 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import NumberFlow from "@number-flow/react";
 import { Toaster, toast } from "sonner";
 import { api, type ApiResponse } from "./api";
-import { getGoogleProviderToken, getSupabaseClient, preloadSupabaseLibrary, requestGmailSendScope, resetSupabaseClient, DEFAULT_SUPABASE_URL } from "./supabase";
+import { getGoogleProviderRefreshToken, getGoogleProviderToken, getSupabaseClient, preloadSupabaseLibrary, requestGmailReadScope, requestGmailSendScope, resetSupabaseClient, DEFAULT_SUPABASE_URL } from "./supabase";
 
 type Dash = ApiResponse<typeof api, "getDashboard">;
 type Deal = Dash["deals"][number];
@@ -31,9 +31,11 @@ const STAGES = [
   { key: "prospect", label: "Prospect" },
   { key: "pitch_ready", label: "Pitch ready" },
   { key: "pitched", label: "Pitched" },
+  { key: "reply_received", label: "Reply received" },
   { key: "negotiating", label: "Negotiating" },
   { key: "approved", label: "Approved" },
-  { key: "content_live", label: "Content live" },
+  { key: "content_production", label: "Content in production" },
+  { key: "content_submitted", label: "Content submitted" },
   { key: "invoiced", label: "Invoiced" },
   { key: "paid", label: "Paid" },
   { key: "lost", label: "Lost" },
@@ -3055,6 +3057,297 @@ function BrandContactsSheet({ open, onClose, deal, userId, accessToken, invalida
   );
 }
 
+/* Deal conversation — the email thread for one deal, the AI reply
+   assistant, the one-click approval card and content submission.
+   Shown once a pitch has been sent (or a reply has arrived). Nothing
+   here sends mail without the creator tapping Send, and nothing is
+   auto-approved: the approval card only appears when AI classified a
+   brand reply as a clear acceptance, and the creator still confirms. */
+const REPLY_LABELS: Record<string, string> = {
+  interested: "Interested",
+  more_info: "Requesting more information",
+  asking_rates: "Asking for rates",
+  negotiating: "Negotiating price",
+  accepting: "Accepting the collaboration",
+  confirming_terms: "Confirming agreed terms",
+  rejecting: "Rejecting the proposal",
+  change_deliverables: "Requesting changes to deliverables",
+  automated: "Automated reply",
+  unrelated: "Unrelated",
+};
+
+function DealConversationSection({ deal, userId, accessToken, invalidate }: { deal: Deal; userId: string; accessToken?: string; invalidate: () => void }) {
+  const reduce = useReducedMotion();
+  const [replyOpen, setReplyOpen] = useState(false);
+  const [replySubject, setReplySubject] = useState("");
+  const [replyBody, setReplyBody] = useState("");
+  const [replyInstruction, setReplyInstruction] = useState("");
+  const [replyMsg, setReplyMsg] = useState("");
+  const [contentUrl, setContentUrl] = useState("");
+  const [contentPlatform, setContentPlatform] = useState("YouTube");
+  const [contentNotes, setContentNotes] = useState("");
+  const [contentDate, setContentDate] = useState("");
+  const [contentMsg, setContentMsg] = useState("");
+  const [approveOpen, setApproveOpen] = useState(false);
+  const [approvePrice, setApprovePrice] = useState("");
+  const [approveMsg, setApproveMsg] = useState("");
+  const [invoiceMsg, setInvoiceMsg] = useState("");
+
+  const messagesQuery = useQuery({
+    queryKey: ["deal-messages", deal.id],
+    queryFn: () => api.listDealMessages({ userId, accessToken, dealId: deal.id }),
+    enabled: Boolean(deal.pitchSentAt),
+  });
+  const submissionsQuery = useQuery({
+    queryKey: ["content-submissions", deal.id],
+    queryFn: () => api.listContentSubmissions({ userId, accessToken, dealId: deal.id }),
+    enabled: deal.stage === "approved" || deal.stage === "content_production" || deal.stage === "content_submitted" || deal.stage === "invoiced" || deal.stage === "paid",
+  });
+  const messages = messagesQuery.data?.messages ?? [];
+  const inbound = messages.filter((m) => m.direction === "inbound");
+  const latestInbound = inbound.length > 0 ? inbound[inbound.length - 1] : null;
+  const acceptance = [...inbound].reverse().find((m) => m.classification === "accepting") ?? null;
+  const submissions = submissionsQuery.data?.submissions ?? [];
+  const canApprove = (deal.stage === "reply_received" || deal.stage === "negotiating" || deal.stage === "approved") && acceptance !== null;
+  const needsFollowUp = deal.pitchSentAt && inbound.length === 0 && Date.now() - new Date(deal.pitchSentAt).getTime() > 7 * 24 * 60 * 60 * 1000;
+
+  const draftMut = useMutation({
+    mutationFn: () => api.generateReplyDraft({ userId, accessToken, dealId: deal.id, instruction: replyInstruction.trim() || undefined }),
+    onSuccess: (r) => { setReplySubject(r.subject); setReplyBody(r.body); setReplyOpen(true); setReplyMsg("Draft ready — edit it below, then send."); },
+    onError: () => { setReplyMsg("Could not draft a reply. Try again."); toast.error("Could not draft a reply. Try again."); },
+  });
+  const sendReplyMut = useMutation({
+    mutationFn: async () => {
+      const token = await getGoogleProviderToken();
+      if (!token) throw new Error("Sign in with Google first, then tap Send again and allow Gmail sending.");
+      return api.sendDealReply({ userId, accessToken, dealId: deal.id, gmailToken: token, subject: replySubject, body: replyBody });
+    },
+    onSuccess: (r) => {
+      if (r.status === "sent") {
+        setReplyMsg(r.message);
+        setReplyOpen(false);
+        setReplySubject("");
+        setReplyBody("");
+        toast.success("Reply sent from your Gmail");
+        invalidate();
+      } else {
+        setReplyMsg(r.message);
+        toast.error(r.message);
+      }
+    },
+    onError: (e) => { setReplyMsg(e instanceof Error ? e.message : "Could not send. Try again."); toast.error("Could not send. Try again."); },
+  });
+  const approveMut = useMutation({
+    mutationFn: () => api.approveDeal({
+      userId, accessToken, dealId: deal.id,
+      sourceMessageId: acceptance?.id,
+      approvedPrice: parseFloat(approvePrice),
+      currency: deal.currency,
+      deliverables: acceptance?.deliverables ?? deal.deliverable,
+      conditions: acceptance?.conditions ?? undefined,
+    }),
+    onSuccess: () => {
+      setApproveMsg("Deal approved — time to create the content.");
+      setApproveOpen(false);
+      toast.success("Deal approved");
+      invalidate();
+    },
+    onError: (e) => { setApproveMsg(e instanceof Error ? e.message : "Could not approve. Try again."); toast.error("Could not approve. Try again."); },
+  });
+  const submitMut = useMutation({
+    mutationFn: () => api.submitContent({ userId, accessToken, dealId: deal.id, contentUrl: contentUrl.trim(), platform: contentPlatform, notes: contentNotes.trim() || undefined, publishedAt: contentDate || undefined }),
+    onSuccess: () => {
+      setContentMsg("Content submitted.");
+      setContentUrl("");
+      setContentNotes("");
+      setContentDate("");
+      toast.success("Content submitted");
+      invalidate();
+    },
+    onError: (e) => { setContentMsg(e instanceof Error ? e.message : "Could not submit. Check the link and try again."); toast.error("Could not submit. Try again."); },
+  });
+  const invoiceMut = useMutation({
+    mutationFn: () => api.createInvoiceFromDeal({ userId, accessToken, dealId: deal.id }),
+    onSuccess: (r) => {
+      setInvoiceMsg(`Invoice ${r.invoiceNumber} created — review and send it from the Invoices tab.`);
+      toast.success("Invoice created");
+      invalidate();
+    },
+    onError: (e) => { setInvoiceMsg(e instanceof Error ? e.message : "Could not create the invoice. Try again."); toast.error("Could not create the invoice. Try again."); },
+  });
+
+  if (!deal.pitchSentAt && inbound.length === 0) return null;
+
+  return (
+    <div className="mt-4 space-y-4 border-t border-[var(--border)] pt-4">
+      <div>
+        <p className="text-xs font-bold uppercase tracking-wide text-[var(--dim)]">Conversation</p>
+        {messagesQuery.isPending && (
+          <p className="mt-2 inline-flex items-center gap-2 text-sm text-[var(--dim)]" role="status"><Spinner /> Loading conversation…</p>
+        )}
+        {messagesQuery.isError && (
+          <p className="mt-2 text-sm text-[var(--danger)]" role="alert">Could not load the conversation. Try again.</p>
+        )}
+        {!messagesQuery.isPending && !messagesQuery.isError && messages.length === 0 && (
+          <p className="mt-2 text-sm text-[var(--dim)]">No replies yet. The pitch is in the brand's inbox — DealRate checks for a reply every 30 minutes.</p>
+        )}
+        {messages.length > 0 && (
+          <ul className="mt-2 space-y-3">
+            {messages.map((m) => (
+              <li key={m.id} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-3.5 py-3">
+                <p className="text-xs font-bold uppercase tracking-wide text-[var(--dim)]">
+                  {m.direction === "inbound" ? `Brand · ${deal.brandName}` : "You"}
+                  {m.receivedAt ? ` · ${new Date(m.receivedAt).toLocaleDateString()}` : ""}
+                  {m.classification ? ` · ${REPLY_LABELS[m.classification] ?? m.classification}` : ""}
+                </p>
+                {m.subject && <p className="mt-1 text-sm font-bold [overflow-wrap:anywhere]">{m.subject}</p>}
+                {m.aiSummary && m.direction === "inbound" && (
+                  <p className="mt-1 text-sm text-[var(--dim)]">{m.aiSummary}</p>
+                )}
+                <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed [overflow-wrap:anywhere]">{m.bodyText}</p>
+              </li>
+            ))}
+          </ul>
+        )}
+        {needsFollowUp && (
+          <p className="mt-2 text-xs text-[var(--dim)]">No reply in over a week. You can follow up manually — write a short nudge with the reply assistant below, or tap "Draft a reply" and send it as a follow-up.</p>
+        )}
+      </div>
+
+      {acceptance && canApprove && (
+        <div className="rounded-2xl border border-[var(--accent)] bg-[var(--accent)]/10 px-4 py-3.5" role="alert">
+          <p className="text-sm font-bold">Brand accepted the collaboration</p>
+          <p className="mt-1 text-sm leading-relaxed text-[var(--dim)]">{acceptance.aiSummary ?? "The brand accepted the collaboration."}</p>
+          <dl className="mt-2 space-y-1 text-sm">
+            <div className="flex justify-between gap-2"><dt className="text-[var(--dim)]">Brand</dt><dd className="font-medium">{deal.brandName}</dd></div>
+            <div className="flex justify-between gap-2"><dt className="text-[var(--dim)]">Deliverables</dt><dd className="font-medium text-right [overflow-wrap:anywhere]">{acceptance.deliverables ?? deal.deliverable}</dd></div>
+            <div className="flex justify-between gap-2"><dt className="text-[var(--dim)]">Your agreed price</dt><dd className="font-medium">{deal.agreedPrice != null ? `${deal.agreedPrice} ${deal.currency}` : "Not set"}</dd></div>
+            {acceptance.statedPrice != null && (
+              <div className="flex justify-between gap-2"><dt className="text-[var(--dim)]">Brand's stated price</dt><dd className="font-medium">{acceptance.statedPrice} {deal.currency}</dd></div>
+            )}
+            {acceptance.conditions && (
+              <div className="flex justify-between gap-2"><dt className="text-[var(--dim)]">Conditions</dt><dd className="font-medium text-right [overflow-wrap:anywhere]">{acceptance.conditions}</dd></div>
+            )}
+          </dl>
+          <p className="mt-2 text-xs text-[var(--dim)]">Review the terms above. Accepting sets the agreed price and moves the deal to Content in production. Nothing is binding until you confirm.</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" className={btnPrimary} onClick={() => { setApprovePrice(String(acceptance.statedPrice ?? deal.agreedPrice ?? "")); setApproveOpen((o) => !o); }}>
+              {approveOpen ? "Hide review" : "Review agreement"}
+            </button>
+            <button type="button" className={btnGhost} onClick={() => { setReplyOpen(true); setReplyInstruction("Continue the negotiation — I want to discuss the terms before confirming."); }}>
+              Continue negotiation
+            </button>
+          </div>
+          {approveOpen && (
+            <div className="mt-3 space-y-3 border-t border-[var(--border)] pt-3">
+              <div>
+                <label className={labelCls} htmlFor={`approve-price-${deal.id}`}>Agreed price (confirm or change)</label>
+                <input id={`approve-price-${deal.id}`} className={inputCls} inputMode="decimal" value={approvePrice} onChange={(e) => setApprovePrice(e.target.value)} placeholder={deal.agreedPrice != null ? String(deal.agreedPrice) : "25000"} />
+              </div>
+              <button type="button" className={btnPrimary} disabled={approveMut.isPending || !approvePrice.trim() || Number.isNaN(parseFloat(approvePrice))} onClick={() => approveMut.mutate()}>
+                {approveMut.isPending ? "Approving…" : "Accept and approve deal"}
+              </button>
+              {approveMsg && <p className="text-sm text-[var(--dim)]" role="status">{approveMsg}</p>}
+            </div>
+          )}
+        </div>
+      )}
+
+      {inbound.length > 0 && (
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-[var(--dim)]">Reply assistant</p>
+          <p className="mt-1 text-sm text-[var(--dim)]">AI drafts a reply from the real conversation and your agreed price. You edit it and approve it — nothing is sent without you tapping Send.</p>
+          <div className="mt-2">
+            <label className={labelCls} htmlFor={`reply-instruction-${deal.id}`}>What should the reply say? (optional)</label>
+            <input id={`reply-instruction-${deal.id}`} className={inputCls} value={replyInstruction} onChange={(e) => setReplyInstruction(e.target.value)} placeholder="e.g. Accept the price and confirm the delivery date" />
+          </div>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <button type="button" className={btnPrimary} disabled={draftMut.isPending} onClick={() => draftMut.mutate()}>
+              {draftMut.isPending ? <span className="inline-flex items-center gap-2"><Spinner /> Drafting…</span> : "Draft a reply"}
+            </button>
+            {replyOpen && (
+              <button type="button" className={btnGhost} onClick={() => { setReplyOpen(false); setReplySubject(""); setReplyBody(""); }}>Discard draft</button>
+            )}
+          </div>
+          {replyOpen && (
+            <div className="mt-3 space-y-3">
+              <div>
+                <label className={labelCls} htmlFor={`reply-subject-${deal.id}`}>Subject</label>
+                <input id={`reply-subject-${deal.id}`} className={inputCls} value={replySubject} onChange={(e) => setReplySubject(e.target.value)} />
+              </div>
+              <div>
+                <label className={labelCls} htmlFor={`reply-body-${deal.id}`}>Reply (edit before sending)</label>
+                <textarea id={`reply-body-${deal.id}`} className={inputCls} rows={8} value={replyBody} onChange={(e) => setReplyBody(e.target.value)} />
+              </div>
+              <button type="button" className={btnPrimary} disabled={sendReplyMut.isPending || !replySubject.trim() || !replyBody.trim()} onClick={() => sendReplyMut.mutate()}>
+                {sendReplyMut.isPending ? "Sending…" : "Send reply"}
+              </button>
+            </div>
+          )}
+          {replyMsg && <p className="mt-2 text-sm text-[var(--dim)]" role="status">{replyMsg}</p>}
+        </div>
+      )}
+
+      {(deal.stage === "approved" || deal.stage === "content_production" || deal.stage === "content_submitted" || deal.stage === "invoiced" || deal.stage === "paid") && (
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wide text-[var(--dim)]">Content delivery</p>
+          {submissions.length > 0 && (
+            <ul className="mt-2 space-y-2">
+              {submissions.map((s) => (
+                <li key={s.id} className="text-sm">
+                  <a href={s.contentUrl} target="_blank" rel="noreferrer" className="font-medium text-[var(--accent)] underline [overflow-wrap:anywhere]">{s.contentUrl}</a>
+                  <span className="text-xs text-[var(--dim)]"> · {s.platform ?? "Content"}{s.publishedAt ? ` · ${s.publishedAt}` : ""}</span>
+                  {s.notes && <p className="text-xs text-[var(--dim)]">{s.notes}</p>}
+                </li>
+              ))}
+            </ul>
+          )}
+          {(deal.stage === "approved" || deal.stage === "content_production" || deal.stage === "content_submitted") && (
+            <div className="mt-2 space-y-3">
+              <div>
+                <label className={labelCls} htmlFor={`content-url-${deal.id}`}>Published content URL</label>
+                <input id={`content-url-${deal.id}`} className={inputCls} type="url" value={contentUrl} onChange={(e) => setContentUrl(e.target.value)} placeholder="https://youtube.com/watch?v=…" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelCls} htmlFor={`content-platform-${deal.id}`}>Platform</label>
+                  <select id={`content-platform-${deal.id}`} className={inputCls} value={contentPlatform} onChange={(e) => setContentPlatform(e.target.value)}>
+                    <option value="YouTube">YouTube</option>
+                    <option value="Instagram">Instagram</option>
+                    <option value="Other">Other</option>
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls} htmlFor={`content-date-${deal.id}`}>Publication date</label>
+                  <input id={`content-date-${deal.id}`} className={inputCls} type="date" value={contentDate} onChange={(e) => setContentDate(e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <label className={labelCls} htmlFor={`content-notes-${deal.id}`}>Delivery notes (optional)</label>
+                <input id={`content-notes-${deal.id}`} className={inputCls} value={contentNotes} onChange={(e) => setContentNotes(e.target.value)} placeholder="e.g. Dedicated video, 10 minutes" />
+              </div>
+              <button type="button" className={btnPrimary} disabled={submitMut.isPending || !contentUrl.trim()} onClick={() => submitMut.mutate()}>
+                {submitMut.isPending ? "Submitting…" : "Submit content"}
+              </button>
+              {contentMsg && <p className="text-sm text-[var(--dim)]" role="status">{contentMsg}</p>}
+            </div>
+          )}
+          {deal.stage === "content_submitted" && (
+            <div className="mt-3">
+              <p className="text-sm font-bold">Content submitted successfully</p>
+              <p className="mt-1 text-sm text-[var(--dim)]">Create the invoice from the agreed price — it is pre-filled with the brand, the agreed price and your content link. Review it before sending.</p>
+              <button type="button" className={btnPrimary + " mt-2"} disabled={invoiceMut.isPending} onClick={() => invoiceMut.mutate()}>
+                {invoiceMut.isPending ? "Creating…" : "Create invoice"}
+              </button>
+              {invoiceMsg && <p className="mt-2 text-sm text-[var(--dim)]" role="status">{invoiceMsg}</p>}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DealCard({ deal, data, userId, accessToken, invalidate, index = 0, autoResearch, onAutoResearchDone }: { deal: Deal; data: Dash; userId: string; accessToken?: string; invalidate: () => void; index?: number; autoResearch?: boolean; onAutoResearchDone?: () => void }) {
   const reduce = useReducedMotion();
   const [subject, setSubject] = useState(deal.pitchSubject ?? "");
@@ -3155,7 +3448,7 @@ function DealCard({ deal, data, userId, accessToken, invalidate, index = 0, auto
           <label className={labelCls} htmlFor={`deal-stage-${deal.id}`}>Stage</label>
           <select
             id={`deal-stage-${deal.id}`} className={inputCls} value={deal.stage}
-            onChange={(e) => api.updateDeal({ userId, accessToken, id: deal.id, stage: e.target.value as "prospect" | "pitch_ready" | "pitched" | "negotiating" | "approved" | "content_live" | "invoiced" | "paid" | "lost" }).then(invalidate)}
+            onChange={(e) => api.updateDeal({ userId, accessToken, id: deal.id, stage: e.target.value as "prospect" | "pitch_ready" | "pitched" | "reply_received" | "negotiating" | "approved" | "content_production" | "content_submitted" | "invoiced" | "paid" | "lost" }).then(invalidate)}
           >
             {STAGES.map((s) => <option key={s.key} value={s.key}>{s.label}</option>)}
           </select>
@@ -3261,7 +3554,149 @@ function DealCard({ deal, data, userId, accessToken, invalidate, index = 0, auto
       {sendMsg && <p className="mt-3 text-sm text-[var(--dim)]" role="status">{sendMsg}</p>}
       {needsGmailGrant && <GmailGrantPanel />}
       <BrandResearchSection deal={deal} userId={userId} accessToken={accessToken} invalidate={invalidate} autoResearch={autoResearch} onAutoResearchDone={onAutoResearchDone} />
+      <DealConversationSection deal={deal} userId={userId} accessToken={accessToken} invalidate={invalidate} />
     </motion.li>
+  );
+}
+
+/* Reply tracking + notifications — the Deals tab header. Shows
+   whether Gmail reply tracking is on (so brand replies are found
+   automatically), lets the creator enable it (grants gmail.readonly
+   and stores an encrypted refresh token on the server), and shows
+   unread brand-reply notifications with a badge. When Gmail is
+   disconnected or the permission expired, it warns and offers to
+   reconnect — previously synced messages are never lost. */
+function ReplyTrackingSection({ userId, accessToken, invalidate }: { userId: string; accessToken?: string; invalidate: () => void }) {
+  const [notifOpen, setNotifOpen] = useState(false);
+  const [statusMsg, setStatusMsg] = useState("");
+  const statusQuery = useQuery({
+    queryKey: ["gmail-status", userId],
+    queryFn: () => api.getGmailStatus({ userId, accessToken }),
+  });
+  const notifQuery = useQuery({
+    queryKey: ["notifications", userId],
+    queryFn: () => api.listNotifications({ userId, accessToken, limit: 30 }),
+  });
+  const status = statusQuery.data;
+  const unread = notifQuery.data?.unreadCount ?? 0;
+  const notifications = notifQuery.data?.notifications ?? [];
+
+  const enableMut = useMutation({
+    mutationFn: async () => {
+      // Grant gmail.readonly (Google shows the permission screen),
+      // then, on return, the session carries a refresh token — save
+      // it encrypted on the server. If the session already has one
+      // (the creator just came back from granting), save it now.
+      const refresh = await getGoogleProviderRefreshToken();
+      if (refresh) {
+        return api.saveGmailToken({ userId, accessToken, refreshToken: refresh });
+      }
+      await requestGmailReadScope();
+      return null;
+    },
+    onSuccess: (r) => {
+      if (r) {
+        setStatusMsg(`Reply tracking is on for ${r.email}. DealRate checks your inbox every 30 minutes.`);
+        toast.success("Reply tracking is on");
+        invalidate();
+      }
+    },
+    onError: (e) => { setStatusMsg(e instanceof Error ? e.message : "Could not enable reply tracking. Try again."); toast.error("Could not enable reply tracking. Try again."); },
+  });
+  const syncMut = useMutation({
+    mutationFn: async () => {
+      const token = await getGoogleProviderToken();
+      if (!token) throw new Error("Sign in with Google first, then tap Check for replies again.");
+      return api.syncGmailNow({ userId, accessToken, gmailToken: token });
+    },
+    onSuccess: (r) => {
+      if (r.newMessages > 0) {
+        setStatusMsg(`${r.newMessages} new brand ${r.newMessages === 1 ? "reply" : "replies"} found.`);
+        toast.success("New brand replies found");
+      } else if (r.error) {
+        setStatusMsg(r.error);
+      } else {
+        setStatusMsg("No new replies right now.");
+      }
+      invalidate();
+    },
+    onError: (e) => { setStatusMsg(e instanceof Error ? e.message : "Could not check for replies. Try again."); toast.error("Could not check for replies. Try again."); },
+  });
+  const readAllMut = useMutation({
+    mutationFn: () => api.markAllNotificationsRead({ userId, accessToken }),
+    onSuccess: () => invalidate(),
+  });
+
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className={btnGhost + " relative"}
+          aria-label={`Notifications${unread > 0 ? `, ${unread} unread` : ""}`}
+          onClick={() => setNotifOpen((o) => !o)}
+        >
+          Notifications
+          {unread > 0 && (
+            <span className="ml-2 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[var(--danger)] px-1.5 text-[11px] font-bold text-white">{unread}</span>
+          )}
+        </button>
+        <button type="button" className={btnGhost} disabled={syncMut.isPending} onClick={() => syncMut.mutate()}>
+          {syncMut.isPending ? "Checking…" : "Check for replies now"}
+        </button>
+      </div>
+      {notifOpen && (
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-bold">Notifications</p>
+            {unread > 0 && (
+              <button type="button" className="text-xs font-semibold text-[var(--accent)] underline" onClick={() => readAllMut.mutate()}>Mark all read</button>
+            )}
+          </div>
+          {notifications.length === 0 && (
+            <p className="mt-2 text-sm text-[var(--dim)]">No notifications yet. When a brand replies to your pitch, it shows up here.</p>
+          )}
+          {notifications.length > 0 && (
+            <ul className="mt-2 space-y-2">
+              {notifications.map((n) => (
+                <li key={n.id} className="text-sm">
+                  <p className="font-medium">{n.title}</p>
+                  {n.body && <p className="text-[var(--dim)]">{n.body}</p>}
+                  <p className="text-xs text-[var(--dim)]">{new Date(n.createdAt).toLocaleString()}</p>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+      {statusQuery.isPending && (
+        <p className="text-sm text-[var(--dim)]">Checking reply tracking…</p>
+      )}
+      {!statusQuery.isPending && status && !status.connected && (
+        <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3.5">
+          <p className="text-sm font-bold">Reply tracking is off</p>
+          <p className="mt-1 text-sm leading-relaxed text-[var(--dim)]">Turn it on and DealRate will watch your Gmail for brand replies, understand them, and update your deals — you will not have to check Gmail yourself. It asks Google for permission to read your inbox, and the connection is stored encrypted on the server.</p>
+          <button type="button" className={btnPrimary + " mt-3"} disabled={enableMut.isPending} onClick={() => enableMut.mutate()}>
+            {enableMut.isPending ? "Enabling…" : "Enable reply tracking"}
+          </button>
+        </div>
+      )}
+      {!statusQuery.isPending && status && status.connected && status.invalid && (
+        <div className="rounded-2xl border border-[var(--amber)] bg-[var(--surface-alt)] px-4 py-3.5" role="alert">
+          <p className="text-sm font-bold">Gmail needs reconnecting</p>
+          <p className="mt-1 text-sm leading-relaxed text-[var(--dim)]">DealRate can no longer read your inbox — the Gmail permission expired or was revoked. Your previously synced replies are safe. Tap below to reconnect.</p>
+          <button type="button" className={btnPrimary + " mt-3"} disabled={enableMut.isPending} onClick={() => enableMut.mutate()}>
+            {enableMut.isPending ? "Reconnecting…" : "Reconnect Gmail"}
+          </button>
+        </div>
+      )}
+      {!statusQuery.isPending && status && status.connected && !status.invalid && (
+        <p className="text-sm text-[var(--dim)]">
+          Reply tracking is on{status.email ? ` for ${status.email}` : ""}{status.lastSyncAt ? ` · last checked ${new Date(status.lastSyncAt).toLocaleString()}` : ""}. DealRate checks your inbox every 30 minutes.
+        </p>
+      )}
+      {statusMsg && <p className="text-sm text-[var(--dim)]" role="status">{statusMsg}</p>}
+    </div>
   );
 }
 
@@ -3279,6 +3714,7 @@ function DealsTab({ data, userId, accessToken, invalidate, autoResearchDealId, o
         description="Track every pitch till it's paid."
         visual={<IntroPipeVisual />}
       />
+      <ReplyTrackingSection userId={userId} accessToken={accessToken} invalidate={invalidate} />
       <section aria-label="Deal pipeline">
         <SectionTitle right={<span className="flex-none whitespace-nowrap rounded-full bg-[var(--violet)] px-2.5 py-1 text-xs font-bold text-[var(--accent-ink)]">PRO</span>}>Deal pipeline</SectionTitle>
         <p className="mt-1 text-sm text-[var(--dim)]">First pitch to paid. Pitch, agree the price, invoice in one tap.</p>

@@ -18,6 +18,9 @@ export interface Env {
   razorpayWebhookSecret?: string;
   publicUrl?: string;
   cronSecret?: string;
+  tokenEncryptionKey?: string;
+  googleClientId?: string;
+  googleClientSecret?: string;
 }
 
 /** The Supabase project URL used when the settings row has none stored. */
@@ -44,5 +47,8 @@ export function loadEnv(): Env {
     razorpayWebhookSecret: clean(e.RAZORPAY_WEBHOOK_SECRET),
     publicUrl: clean(e.PUBLIC_URL),
     cronSecret: clean(e.CRON_SECRET),
+    tokenEncryptionKey: clean(e.TOKEN_ENCRYPTION_KEY),
+    googleClientId: clean(e.GOOGLE_CLIENT_ID),
+    googleClientSecret: clean(e.GOOGLE_CLIENT_SECRET),
   };
 }

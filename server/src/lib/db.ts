@@ -119,6 +119,8 @@ export interface DealRow {
   pitch_subject: string | null;
   pitch_body: string | null;
   pitch_sent_at: string | null;
+  pitch_gmail_message_id: string | null;
+  pitch_gmail_thread_id: string | null;
   notes: string | null;
   research_json: unknown | null;
   research_checked_at: string | null;
@@ -155,7 +157,63 @@ export interface InvoiceRow {
   status: string;
   reminder_count: number;
   last_reminder_at: string | null;
+  sent_at: string | null;
+  paid_at: string | null;
   created_at: string;
+}
+
+export interface DealMessageRow {
+  id: number;
+  owner_id: string | null;
+  deal_id: number;
+  gmail_message_id: string;
+  gmail_thread_id: string | null;
+  direction: string;
+  from_email: string | null;
+  to_email: string | null;
+  subject: string | null;
+  body_text: string | null;
+  received_at: string | null;
+  classification: string | null;
+  ai_summary: string | null;
+  stated_price: number | null;
+  deliverables: string | null;
+  conditions: string | null;
+  created_at: string;
+}
+
+export interface NotificationRow {
+  id: number;
+  owner_id: string | null;
+  deal_id: number | null;
+  type: string;
+  title: string;
+  body: string | null;
+  is_read: boolean;
+  created_at: string;
+}
+
+export interface ContentSubmissionRow {
+  id: number;
+  owner_id: string | null;
+  deal_id: number;
+  content_url: string;
+  platform: string | null;
+  notes: string | null;
+  published_at: string | null;
+  created_at: string;
+}
+
+export interface DealApprovalRow {
+  id: number;
+  owner_id: string | null;
+  deal_id: number;
+  source_message_id: number | null;
+  approved_price: number | null;
+  currency: string | null;
+  deliverables: string | null;
+  conditions: string | null;
+  approved_at: string;
 }
 
 export interface ReminderRow {
