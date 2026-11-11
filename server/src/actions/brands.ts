@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { requireProPlan, requireVerifiedUser } from "../lib/auth";
 import { discoverSponsorshipBrands } from "../lib/sponsorship";
+import { bestContact, discoverBrandEmails } from "../lib/brandEmail";
 import {
   dbThrow,
   requireDb,
@@ -56,6 +57,40 @@ export async function discoverBrands(
   }
 
   const { discovery } = await discoverSponsorshipBrands(ctx.env, niche, country);
+  // Find each brand's contact email NOW, at discovery time — not
+  // only later in the research step. A brand whose email is blank
+  // when the creator sees it is a brand they have to look up by
+  // hand, which defeats the point of the Finder. The lookups run in
+  // parallel (bounded by the slowest brand, ~10s) and a failure for
+  // one brand never blocks the others or the search itself.
+  const contactByBrand = new Map<string, string>();
+  const contactPageByBrand = new Map<string, string>();
+  await Promise.allSettled(
+    discovery.brands.map(async (s) => {
+      const website = (s.website ?? "").trim() || null;
+      if (!website) return;
+      try {
+        const found = await Promise.race([
+          discoverBrandEmails({
+            brandName: s.name,
+            website,
+            candidatePages: [],
+          }),
+          new Promise<null>((resolve) =>
+            setTimeout(() => resolve(null), 12_000),
+          ),
+        ]);
+        if (!found) return;
+        const best = bestContact(found.contacts);
+        if (best) contactByBrand.set(s.name.toLowerCase(), best.email);
+        if (found.contactPageUrl) {
+          contactPageByBrand.set(s.name.toLowerCase(), found.contactPageUrl);
+        }
+      } catch {
+        /* no contact found for this brand — leave it blank */
+      }
+    }),
+  );
   const { data: existingData, error: existingError } = await db
     .from("brands")
     .select("*")
@@ -78,6 +113,7 @@ export async function discoverBrands(
       owner_id: args.userId,
       name: s.name.trim(),
       website,
+      contact_email: contactByBrand.get(s.name.toLowerCase()) ?? null,
       niche,
       notes: s.why,
       source_url: s.sourceUrl,
@@ -93,6 +129,7 @@ export async function discoverBrands(
         evidenceDate: s.evidenceDate,
         evidenceUrl: s.evidenceUrl,
         partnershipUrl: s.partnershipUrl,
+        contactPageUrl: contactPageByBrand.get(s.name.toLowerCase()) ?? null,
       },
     });
     dbThrow(error, "discoverBrands insert");

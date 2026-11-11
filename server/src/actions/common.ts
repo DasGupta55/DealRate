@@ -93,6 +93,7 @@ export interface BrandOut {
     evidenceDate: string | null;
     evidenceUrl: string | null;
     partnershipUrl: string | null;
+    contactPageUrl: string | null;
   } | null;
   isAgency: boolean;
 }
@@ -278,6 +279,7 @@ export function toBrandOut(r: BrandRow): BrandOut {
     evidenceDate?: string | null;
     evidenceUrl?: string | null;
     partnershipUrl?: string | null;
+    contactPageUrl?: string | null;
   } | null;
   return {
     id: r.id,
@@ -300,6 +302,7 @@ export function toBrandOut(r: BrandRow): BrandOut {
           evidenceDate: ev.evidenceDate ?? null,
           evidenceUrl: ev.evidenceUrl ?? null,
           partnershipUrl: ev.partnershipUrl ?? null,
+          contactPageUrl: ev.contactPageUrl ?? null,
         }
       : null,
     isAgency: r.is_agency === true,

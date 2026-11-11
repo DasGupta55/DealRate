@@ -2832,6 +2832,12 @@ function BrandsTab({ data, userId, accessToken, invalidate, goDeals, onDealAdded
                       Contact: <a href={`mailto:${b.contactEmail}`} className="font-medium text-[var(--accent)] underline">{b.contactEmail}</a>
                     </p>
                   )}
+                  {!b.contactEmail && ev?.contactPageUrl && (
+                    <p className="mt-1 text-sm text-[var(--dim)]">
+                      No public email found — this brand takes messages through a form.{" "}
+                      <a href={ev.contactPageUrl} target="_blank" rel="noreferrer" className="font-medium text-[var(--accent)] underline">Contact them through their website</a>
+                    </p>
+                  )}
                   {b.notes && <p className="mt-1 line-clamp-3 text-sm text-[var(--dim)]">{b.notes}</p>}
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-sm font-medium">
                     {b.website && (
@@ -3590,9 +3596,20 @@ function DealCard({ deal, data, userId, accessToken, invalidate, index = 0, auto
         setSendMsg(r.message);
       }
     },
-    onError: () => {
-      setSendMsg("Could not send. Try again, or download the draft.");
-      toast.error("Could not send. Try again, or download the draft.");
+    onError: (e) => {
+      // The server's own error text is in the Error (the api client
+      // throws it). Show it when it says something useful, instead of
+      // hiding every failure behind the same generic line — "Could
+      // not send" on its own never tells the creator what to fix.
+      const detail = e instanceof Error ? e.message : "";
+      const isAuth = /401|403|unauthor|expired|sign in/i.test(detail);
+      const msg = isAuth
+        ? "Your sign-in expired — sign out and sign in again with Google, then tap Send."
+        : detail && !/^Request failed/i.test(detail)
+          ? detail
+          : "Could not send. Try again, or download the draft.";
+      setSendMsg(msg);
+      toast.error(msg);
       setPitchFallback(true);
     },
   });

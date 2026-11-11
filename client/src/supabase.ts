@@ -44,7 +44,19 @@ export async function getCurrentAccessToken(): Promise<string | null> {
   if (!cachedClient) return null;
   try {
     const { data } = await cachedClient.auth.getSession();
-    return data.session?.access_token ?? null;
+    const session = data.session;
+    if (!session) return null;
+    // The stored JWT expires after ~1 hour. If it is expired (or
+    // about to expire), refresh it now so the caller sends a live
+    // token — a stale token makes the server reject the call with a
+    // generic error, which is the most common reason a pitch fails
+    // to send even though the app looks signed in.
+    const expiresAt = (session as { expires_at?: number }).expires_at;
+    if (typeof expiresAt === "number" && expiresAt * 1000 < Date.now() + 60_000) {
+      const { data: refreshed } = await cachedClient.auth.refreshSession();
+      return refreshed.session?.access_token ?? session.access_token ?? null;
+    }
+    return session.access_token ?? null;
   } catch {
     return null;
   }
@@ -60,10 +72,17 @@ export async function getCurrentAccessToken(): Promise<string | null> {
 export async function getGoogleProviderToken(): Promise<string | null> {
   if (!cachedClient) return null;
   try {
-    const { data } = await cachedClient.auth.getSession();
-    if (data.session?.provider_token) return data.session.provider_token;
+    // Refresh first: the stored Google provider token expires after
+    // ~1 hour, and sending with an expired token is the most common
+    // reason a pitch fails. refreshSession() gives a fresh Google
+    // access token (via the stored Google refresh token) and a fresh
+    // Supabase JWT at the same time. If the refresh fails, fall back
+    // to the stored token — the server will then return a clear
+    // "sign in again" status instead of a generic failure.
     const { data: refreshed } = await cachedClient.auth.refreshSession();
-    return refreshed.session?.provider_token ?? null;
+    if (refreshed.session?.provider_token) return refreshed.session.provider_token;
+    const { data } = await cachedClient.auth.getSession();
+    return data.session?.provider_token ?? null;
   } catch {
     return null;
   }

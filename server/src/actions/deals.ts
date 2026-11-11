@@ -593,9 +593,18 @@ export async function sendPitch(
     throw err;
   }
   if (gmailEmail.toLowerCase() !== (verified.email ?? "").toLowerCase()) {
-    throw new Error(
-      "gmail_mismatch: the Gmail token does not match the signed-in account",
-    );
+    // The Gmail token belongs to a different Google account than the
+    // one signed into DealRate (common when the creator has several
+    // Google accounts and granted Gmail while signed into another
+    // one). Return a clear status, not a generic error, so the app
+    // can tell the creator exactly what to do.
+    return {
+      status: "gmail_auth_failed",
+      message:
+        "The Gmail account that granted email permission is not the account signed into DealRate. Sign out, sign in with the Gmail account you want to send from, allow Gmail sending again, then tap Send.",
+      fromEmail: verified.email,
+      draft: null,
+    };
   }
   let sent: { messageId: string; threadId: string | null };
   try {
