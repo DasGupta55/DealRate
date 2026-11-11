@@ -64,9 +64,9 @@ export const OWNER_CONFIG = {
 } as const;
 
 /* ================= BUSINESS CONFIG — the real business details =================
-   Every business value the public pages, the Account page and the
+   Every business value the public pages and the
    manual payment flow need, in ONE place — the owner's real values,
-   used on every page, footer and the Account page. Nothing here is
+   used on every page and footer. Nothing here is
    a secret: these values are meant to be public (they appear on
    the public pages). To change any of them later, edit here and
    every page picks the new value up automatically.
@@ -107,8 +107,7 @@ export const DEMO_LOGIN = {
    The eight public pages (About, Pricing, Contact, Terms, Privacy,
    Cancellation and Refunds, Shipping, Disclaimer). No login is
    needed to read them: they are linked from the footer on every
-   screen, the Account page footer, the profile menu and the upgrade
-   screen, and each one has its own deep-link address in the app
+   screen and the upgrade screen, and each one has its own deep-link address in the app
    (the app address plus #/terms, #/privacy, #/shipping, #/contact
    or #/refund) that opens straight on that page, signed out or not.
    Business name, address, phone and email come from BUSINESS_CONFIG
@@ -173,7 +172,7 @@ export const INFO_PAGES: Record<InfoPageKey, { title: string; paragraphs: string
       "What we collect when you use the tool: the rate cards you save, the brands and deals you add, the invoices you create, and the channel stats fetched from the public YouTube Data API for the channel you ask about. Nothing private about a channel is fetched.",
       "What we collect when you pay: we store your plan, the amount, the date and your Razorpay payment ID, so we can switch Pro on and show your payment history. Payments themselves are handled by Razorpay. We never see or store your card number, UPI PIN or bank details.",
       "Why we collect it and how we use it: only to run your account — to show your rate, save your work, switch Pro on after a verified payment, and help you when you write to us. We do not sell your data, and we do not share it with advertisers.",
-      "Your data is stored against your own account, so only you can see it. You can delete your account and all of your data from the Account page in the app at any time, or email us and we will remove it.",
+      "Your data is stored against your own account, so only you can see it. You can delete your account and all of your data from Settings in the app (tap your profile photo, then Settings) at any time, or email us and we will remove it.",
       `Questions about your data: write to ${BUSINESS_CONFIG.supportEmail} and we will help.`,
     ],
   },
@@ -181,7 +180,7 @@ export const INFO_PAGES: Record<InfoPageKey, { title: string; paragraphs: string
     title: "Cancellation and Refund Policy",
     paragraphs: [
       `${BUSINESS_CONFIG.productName} Pro is a digital product. There are no physical goods, so there are no returns and nothing to ship back to us.`,
-      "How to cancel the ₹189/month plan: open the app, tap your profile photo (top right), choose My account, and tap Cancel Pro in the Manage subscription section. The same steps cancel the ₹1,399/year plan.",
+      "How to cancel the ₹189/month plan: open the app, tap your profile photo (top right), choose Manage subscription, and tap Cancel Pro on the Plan page. The same steps cancel the ₹1,399/year plan.",
       "What happens when you cancel: your Pro access stays on until the end of the period you already paid for (30 days for Monthly, 365 days for Annual), expiry reminders stop, and nothing is refunded automatically. Pro plans never auto-renew, so cancelling is never urgent — no further payment is ever taken on its own, and your account simply returns to Free when the paid period ends. Cancelling never deletes your saved rate cards, brands, deals or invoices.",
       "7-day money-back: if Pro is not right for you, ask for a refund within 7 days of your payment and we will refund the full amount — no questions asked.",
       `To ask, email ${BUSINESS_CONFIG.supportEmail} from the email address on your account, and mention your Razorpay payment ID and payment date so we can find your payment.`,
@@ -534,6 +533,16 @@ const IconChevronDown = () => (
     <path d="m6 9 6 6 6-6" />
   </Icon>
 );
+const IconSettings = ({ size = 18 }: { size?: number }) => (
+  <Icon size={size}>
+    <circle cx="12" cy="12" r="3" /><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+  </Icon>
+);
+const IconLogout = ({ size = 18 }: { size?: number }) => (
+  <Icon size={size}>
+    <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" y1="12" x2="9" y2="12" />
+  </Icon>
+);
 /* The standard multi-colour Google "G" — used only inside the
    Google-branded button in the sign-in sheet, never recoloured. */
 function GoogleG() {
@@ -622,6 +631,64 @@ function SoundMuteButton() {
     >
       {muted ? <IconSoundOff /> : <IconSoundOn />}
     </button>
+  );
+}
+
+/* One shared way to set the button-sound preference, so the header
+   speaker button and the Settings toggle always agree: it uses
+   sound.js when present (which dispatches the change event) and
+   otherwise writes localStorage and dispatches the event itself. */
+function setSoundMuted(next: boolean) {
+  try {
+    if (typeof (window as any).toggleSoundMuted === "function") {
+      if (readSoundMuted() !== next) (window as any).toggleSoundMuted();
+      return;
+    }
+  } catch { /* fall through to the stored choice */ }
+  try { window.localStorage.setItem("bpt-sound-muted", next ? "1" : "0"); } catch { /* non-fatal */ }
+  try { window.dispatchEvent(new CustomEvent("bpt-sound-muted-changed", { detail: { muted: next } })); } catch { /* non-fatal */ }
+}
+
+/* Premium account avatar: the Google profile photo when available,
+   otherwise the user's initials (first letters of the first two
+   name words, or the email's first letter). One component, so the
+   header, the dropdown and Settings all show the same face. */
+function initialsFor(name: string | null, email: string | null): string {
+  const parts = (name ?? "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return ((email ?? "").trim().charAt(0) || "U").toUpperCase();
+}
+
+function UserAvatar({ name, email, avatarUrl, size = 38, className = "" }: {
+  name: string | null;
+  email: string | null;
+  avatarUrl: string | null;
+  size?: number;
+  className?: string;
+}) {
+  const px = `${size}px`;
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt=""
+        width={size}
+        height={size}
+        referrerPolicy="no-referrer"
+        className={`rounded-full object-cover ring-1 ring-white/10 ${className}`}
+        style={{ width: px, height: px }}
+      />
+    );
+  }
+  return (
+    <span
+      aria-hidden
+      className={`flex items-center justify-center rounded-full bg-[var(--surface-alt)] font-bold text-[var(--text)] ring-1 ring-white/10 ${className}`}
+      style={{ width: px, height: px, fontSize: Math.max(12, Math.round(size * 0.38)) }}
+    >
+      {initialsFor(name, email)}
+    </span>
   );
 }
 
@@ -1409,13 +1476,13 @@ export function App() {
   /* A #/page address in the URL opens that public page directly,
      before anything else — the pages must be reachable with no
      login and no tapping through the app. */
-  const [tab, setTab] = useState<"price" | "brands" | "deals" | "invoices" | "plan" | "account" | "owner" | "legal">(() => (infoPageFromHash() ? "legal" : "price"));
+  const [tab, setTab] = useState<"price" | "brands" | "deals" | "invoices" | "plan" | "owner" | "legal">(() => (infoPageFromHash() ? "legal" : "price"));
   // The deal just added from Brand Finder, so its AI Brand Research
   // starts automatically once the Deals tab renders it.
   const [autoResearchDealId, setAutoResearchDealId] = useState<number | null>(null);
   /* Where "Back" on a public info page returns to — the page the
      reader came from (Plan, Account, or wherever the footer was). */
-  const [legalReturn, setLegalReturn] = useState<"price" | "brands" | "deals" | "invoices" | "plan" | "account" | "owner">("plan");
+  const [legalReturn, setLegalReturn] = useState<"price" | "brands" | "deals" | "invoices" | "plan" | "owner">("plan");
   /* Demo reviewer session (see DEMO_LOGIN): a local flag, not a
      Supabase session. While it is on, the auth effect below leaves
      the demo identity alone instead of clearing it. */
@@ -1427,6 +1494,14 @@ export function App() {
      identity, plan and sign-out, and the four info pages render as
      the "legal" view, reached only from the menu. */
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  // Escape closes the profile menu (keyboard support).
+  useEffect(() => {
+    if (!profileMenuOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setProfileMenuOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [profileMenuOpen]);
   const [legalPage, setLegalPage] = useState<InfoPageKey>(() => infoPageFromHash() ?? "privacy");
   const [userAvatar, setUserAvatar] = useState<string | null>(null);
   const [authState, setAuthState] = useState<"idle" | "checking" | "signed_in" | "signed_out" | "error">("idle");
@@ -1578,7 +1653,6 @@ export function App() {
     clearSessionUser();
     setAccessToken(null);
     setAuthState("signed_out");
-    if (tab === "account") setTab("price");
     queryClient.removeQueries({ queryKey: ["dashboard"] });
   }
 
@@ -1724,96 +1798,84 @@ export function App() {
                   aria-label={`Profile menu — signed in as ${userEmail}`}
                   aria-haspopup="menu"
                   aria-expanded={profileMenuOpen}
-                  className="btn-press block"
+                  className={`btn-press block rounded-full transition-all duration-150 hover:scale-[1.06] hover:ring-2 hover:ring-white/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] active:scale-95 ${profileMenuOpen ? "scale-[1.06] ring-2 ring-[var(--accent)]/60" : ""}`}
                 >
-                  {userAvatar ? (
-                    <img src={userAvatar} alt="" width={38} height={38} className="h-[38px] w-[38px] rounded-full object-cover" referrerPolicy="no-referrer" />
-                  ) : (
-                    <span className="flex h-[38px] w-[38px] items-center justify-center rounded-full bg-[var(--surface-alt)] text-base font-bold text-[var(--text)]" aria-hidden>
-                      {(userEmail.trim().charAt(0) || "U").toUpperCase()}
-                    </span>
-                  )}
+                  <UserAvatar name={userName} email={userEmail} avatarUrl={userAvatar} size={38} />
                 </button>
-                {profileMenuOpen && (
-                  <>
-                    <button
-                      type="button"
-                      aria-label="Close profile menu"
-                      data-sound="none"
-                      className="fixed inset-0 z-40 cursor-default"
-                      onClick={() => setProfileMenuOpen(false)}
-                    />
-                    <div
-                      role="menu"
-                      aria-label="Profile"
-                      className="card absolute right-0 top-[calc(100%+10px)] z-50 w-[280px] max-w-[calc(100vw-2rem)] p-2"
-                    >
-                      <div className="px-3 pb-2 pt-2.5">
-                        <p className="truncate text-base font-bold" title={userName ?? undefined}>{userName ?? userEmail}</p>
-                        <p className="truncate text-sm text-[var(--dim)]" title={userEmail}>{userEmail}</p>
-                        <p className="mt-2 flex items-center gap-1.5 text-sm font-semibold">
-                          <span className={`inline-block h-2 w-2 flex-none rounded-full ${isPro ? "bg-[var(--violet)]" : "bg-[var(--accent)]"}`} aria-hidden />
-                          {displayData.proActive && menuExpiryLabel
-                            ? <>Pro — ends {menuExpiryLabel}</>
-                            : displayData.plan === "pro"
-                              ? "Pro — on for this workspace"
-                              : "Free plan"}
-                        </p>
-                      </div>
-                      <div className="border-t border-[var(--border)] pt-1.5">
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className="btn-press flex min-h-[44px] w-full items-center rounded-xl px-3 text-left text-sm font-semibold"
-                          onClick={() => { setProfileMenuOpen(false); setTab("account"); }}
-                        >
-                          My account
-                        </button>
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className="btn-press flex min-h-[44px] w-full items-center rounded-xl px-3 text-left text-sm font-semibold"
-                          onClick={() => { setProfileMenuOpen(false); setTab("plan"); }}
-                        >
-                          Manage plan
-                        </button>
-                        {isOwner && (
+                <AnimatePresence>
+                  {profileMenuOpen && (
+                    <>
+                      <button
+                        type="button"
+                        aria-label="Close profile menu"
+                        data-sound="none"
+                        className="fixed inset-0 z-40 cursor-default"
+                        onClick={() => setProfileMenuOpen(false)}
+                      />
+                      <motion.div
+                        role="menu"
+                        aria-label="Profile"
+                        initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: -6 }}
+                        animate={reduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 }}
+                        exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: -6 }}
+                        transition={{ duration: 0.15, ease: "easeOut" }}
+                        style={{ transformOrigin: "top right" }}
+                        className="absolute right-0 top-[calc(100%+10px)] z-50 w-[288px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.5)]"
+                      >
+                        <div className="flex items-center gap-3 px-2.5 pb-2.5 pt-2">
+                          <UserAvatar name={userName} email={userEmail} avatarUrl={userAvatar} size={44} />
+                          <div className="min-w-0 flex-1">
+                            <p className="flex items-center gap-2 text-[15px] font-bold" title={userName ?? undefined}>
+                              <span className="min-w-0 truncate">{userName ?? userEmail}</span>
+                              <span className={`flex-none rounded-full px-2 py-0.5 text-[11px] font-bold ${isPro ? "bg-[var(--violet)] text-[var(--accent-ink)]" : "bg-[var(--surface-alt)] text-[var(--dim)]"}`}>
+                                {isPro ? "PRO" : "FREE"}
+                              </span>
+                            </p>
+                            <p className="truncate text-[13px] text-[var(--dim)]" title={userEmail}>{userEmail}</p>
+                            <p className="mt-0.5 truncate text-xs font-medium text-[var(--dim)]">
+                              {displayData.proActive && menuExpiryLabel
+                                ? `Pro — ends ${menuExpiryLabel}`
+                                : displayData.plan === "pro"
+                                  ? "Pro — on for this workspace"
+                                  : "Free plan"}
+                            </p>
+                          </div>
+                        </div>
+                        <div className="border-t border-[var(--border)] pt-1.5">
                           <button
                             type="button"
                             role="menuitem"
-                            className="btn-press flex min-h-[44px] w-full items-center rounded-xl px-3 text-left text-sm font-semibold"
-                            onClick={() => { setProfileMenuOpen(false); setTab("owner"); }}
+                            className="btn-press flex min-h-[44px] w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold transition-colors hover:bg-[var(--surface-alt)]"
+                            onClick={() => { setProfileMenuOpen(false); setSettingsOpen(true); }}
                           >
-                            Owner settings
+                            <span className="flex-none text-[var(--dim)]"><IconSettings size={18} /></span>
+                            Settings
                           </button>
-                        )}
-                      </div>
-                      <div className="border-t border-[var(--border)] pt-1.5">
-                        {(Object.keys(INFO_PAGES) as InfoPageKey[]).map((key) => (
                           <button
-                            key={key}
                             type="button"
                             role="menuitem"
-                            className="btn-press flex min-h-[44px] w-full items-center rounded-xl px-3 text-left text-sm font-medium text-[var(--dim)]"
-                            onClick={() => openLegal(key)}
+                            className="btn-press flex min-h-[44px] w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold transition-colors hover:bg-[var(--surface-alt)]"
+                            onClick={() => { setProfileMenuOpen(false); setTab("plan"); }}
                           >
-                            {INFO_PAGES[key].title}
+                            <span className="flex-none text-[var(--dim)]"><IconCrown /></span>
+                            Manage subscription
                           </button>
-                        ))}
-                      </div>
-                      <div className="border-t border-[var(--border)] pt-1.5">
-                        <button
-                          type="button"
-                          role="menuitem"
-                          className="btn-press flex min-h-[44px] w-full items-center rounded-xl px-3 text-left text-sm font-semibold text-[var(--danger)]"
-                          onClick={handleSignOut}
-                        >
-                          Sign out
-                        </button>
-                      </div>
-                    </div>
-                  </>
-                )}
+                        </div>
+                        <div className="border-t border-[var(--border)] pt-1.5">
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="btn-press flex min-h-[44px] w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold text-[var(--danger)] transition-colors hover:bg-[var(--danger)]/10"
+                            onClick={handleSignOut}
+                          >
+                            <span className="flex-none"><IconLogout size={18} /></span>
+                            Sign out
+                          </button>
+                        </div>
+                      </motion.div>
+                    </>
+                  )}
+                </AnimatePresence>
               </div>
             ) : (
               <button
@@ -1967,28 +2029,6 @@ export function App() {
             onOpenLegal={openLegal}
           />
         ) : null)}
-        {tab === "account" && (booting ? (
-          <div className="space-y-3" role="status" aria-label="Loading your account">
-            <SkeletonCard />
-            <SkeletonCard lines={2} />
-          </div>
-        ) : data ? (
-          <AccountPage
-            data={displayData}
-            signedIn={signedIn}
-            demoMode={demoMode}
-            userId={userId}
-            accessToken={accessToken}
-            userName={userName}
-            userEmail={userEmail}
-            userAvatar={userAvatar}
-            onOpenSignIn={openSignInSheet}
-            onGoPlan={() => setTab("plan")}
-            onOpenLegal={openLegal}
-            onSignOut={handleSignOut}
-            invalidate={invalidate}
-          />
-        ) : null)}
         {tab === "legal" && (
           <LegalPage page={legalPage} onBack={() => setTab(legalReturn)} />
         )}
@@ -2000,7 +2040,7 @@ export function App() {
 
         {/* Public footer: the eight public pages need no login and
             are linked from every screen, as Razorpay's review
-            expects. The Account page carries the same links. */}
+            expects. */}
         <footer className="mt-10 border-t border-[var(--border)] pt-5 pb-2">
           <nav aria-label="Public pages" className="flex flex-wrap gap-x-4 gap-y-2">
             {(Object.keys(INFO_PAGES) as InfoPageKey[]).map((key) => (
@@ -2060,6 +2100,22 @@ export function App() {
         configured={supabaseConfigured}
         onDemoLogin={startDemoSession}
       />
+      {data && (
+        <AccountSettingsSheet
+          open={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+          data={displayData}
+          userName={userName}
+          userEmail={userEmail}
+          userAvatar={userAvatar}
+          demoMode={demoMode}
+          userId={userId}
+          accessToken={accessToken}
+          onSignOut={handleSignOut}
+          invalidate={invalidate}
+          onGoPlan={() => setTab("plan")}
+        />
+      )}
     </div>
   );
 }
@@ -3010,6 +3066,161 @@ function DealsTab({ data, userId, accessToken, invalidate, goInvoices, autoResea
 
 /* ---------------- Invoices tab ---------------- */
 
+/* ---------------- Compact account settings ----------------
+   The minimal account experience, opened from the profile
+   dropdown — not a separate Account Center page. Only real,
+   working controls: identity, subscription status, the one
+   supported preference (button sounds), and delete account.
+   No legal links here; those live in the footer. */
+
+function AccountSettingsSheet({ open, onClose, data, userName, userEmail, userAvatar, demoMode, userId, accessToken, onSignOut, invalidate, onGoPlan }: {
+  open: boolean;
+  onClose: () => void;
+  data: Dash;
+  userName: string | null;
+  userEmail: string | null;
+  userAvatar: string | null;
+  demoMode: boolean;
+  userId: string | null;
+  accessToken: string | null;
+  onSignOut: () => void;
+  invalidate: () => void;
+  onGoPlan: () => void;
+}) {
+  const reduce = useReducedMotion();
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [muted, setMuted] = useState<boolean>(() => readSoundMuted());
+  useEffect(() => {
+    if (!open) return;
+    setMuted(readSoundMuted());
+    setConfirmDelete(false);
+    const onChange = (e: Event) => {
+      const detail = (e as CustomEvent<{ muted?: boolean }>).detail;
+      setMuted(typeof detail?.muted === "boolean" ? detail.muted : readSoundMuted());
+    };
+    window.addEventListener("bpt-sound-muted-changed", onChange);
+    return () => window.removeEventListener("bpt-sound-muted-changed", onChange);
+  }, [open ]);
+  const isPro = data.plan === "pro" || data.proActive;
+  const planDetail = data.proActive && data.proExpiresAt
+    ? `Pro — ${data.proBilling === "annual" ? "Annual" : "Monthly"} · ends ${fmtDateIN(data.proExpiresAt)}`
+    : data.plan === "pro"
+      ? "Pro — on for this workspace"
+      : "Free plan";
+  const deleteMut = useMutation({
+    mutationFn: () => api.deleteAccountData({ userId: userId ?? "", accessToken: accessToken ?? undefined }),
+    onSuccess: () => {
+      toast.success("Your account data in this app has been deleted.");
+      sfx("success");
+      onSignOut();
+    },
+    onError: () => { toast.error("Could not delete your data just now. Try again."); sfx("error"); },
+  });
+  const toggleSound = () => {
+    const next = !muted;
+    setSoundMuted(next);
+    setMuted(next);
+    if (!next) sfx("toggle");
+  };
+  return (
+    <AnimatePresence>
+      {open && (
+        <>
+          <motion.div
+            key="settings-backdrop"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.2 }}
+            className="fixed inset-0 z-40 bg-black/60"
+            onClick={onClose}
+            aria-hidden
+          />
+          <motion.div
+            key="settings-sheet"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Settings"
+            initial={reduce ? { opacity: 0 } : { y: "105%" }}
+            animate={reduce ? { opacity: 1 } : { y: 0 }}
+            exit={reduce ? { opacity: 0 } : { y: "105%" }}
+            transition={reduce ? { duration: 0.15 } : { duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+            className="sheet-glass fixed inset-x-0 bottom-0 z-50 mx-auto w-full max-w-3xl rounded-t-[28px] px-6 pb-safe pt-3"
+          >
+            <span className="sheet-shimmer" aria-hidden />
+            <div className="mx-auto h-1.5 w-10 rounded-full bg-white/25" aria-hidden />
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <h2 className="display-tight font-headline text-[22px] font-bold">Settings</h2>
+              <button type="button" className={btnGhost} onClick={onClose}>Close</button>
+            </div>
+            <div className="mt-4 flex items-center gap-3.5 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
+              <UserAvatar name={userName} email={userEmail} avatarUrl={userAvatar} size={56} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-base font-bold" title={userName ?? undefined}>{userName ?? "Creator"}</p>
+                <p className="truncate text-sm text-[var(--dim)]" title={userEmail ?? undefined}>{userEmail}</p>
+                {demoMode && <p className="mt-0.5 text-xs font-medium text-[var(--amber)]">Demo session — read-only, nothing is saved.</p>}
+              </div>
+              <span className={`flex-none whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-bold ${isPro ? "bg-[var(--violet)] text-[var(--accent-ink)]" : "bg-[var(--surface-alt)] text-[var(--dim)]"}`}>
+                {isPro ? "PRO" : "FREE"}
+              </span>
+            </div>
+            <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3.5">
+              <div className="min-w-0">
+                <p className="text-sm font-bold">Subscription</p>
+                <p className="truncate text-sm text-[var(--dim)]">{planDetail}</p>
+              </div>
+              <button type="button" className={btnSmall + " flex-none"} onClick={() => { onClose(); onGoPlan(); }}>Manage</button>
+            </div>
+            <div className="mt-3 flex items-center justify-between gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3.5">
+              <div className="min-w-0">
+                <p className="text-sm font-bold">Sound effects</p>
+                <p className="text-sm text-[var(--dim)]">Button sounds in the app</p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={!muted}
+                aria-label="Sound effects"
+                onClick={toggleSound}
+                className={`btn-press relative h-7 w-12 flex-none rounded-full transition-colors ${muted ? "bg-[var(--surface-alt)]" : "bg-[var(--accent)]"}`}
+              >
+                <span className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow transition-all ${muted ? "left-0.5" : "left-[22px]"}`} />
+              </button>
+            </div>
+            <div className="mt-3 rounded-2xl border border-[var(--danger)]/40 bg-[var(--surface)] px-4 py-3.5">
+              {!confirmDelete ? (
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold text-[var(--danger)]">Delete account</p>
+                    <p className="text-sm text-[var(--dim)]">Permanently remove your saved data</p>
+                  </div>
+                  <button type="button" className="btn-press min-h-[40px] flex-none rounded-xl border border-[var(--danger)]/50 px-3.5 text-sm font-semibold text-[var(--danger)]" onClick={() => setConfirmDelete(true)}>
+                    Delete
+                  </button>
+                </div>
+              ) : (
+                <div role="alertdialog" aria-label="Confirm delete account">
+                  <p className="text-sm leading-relaxed">
+                    Delete your account data? This permanently removes your saved rate cards, brands, deals, invoices, drafts and payment records from this app. It cannot be undone. (Your Google account itself is not touched.)
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button type="button" className="btn-press inline-flex min-h-[44px] items-center rounded-xl bg-[var(--danger)] px-4 py-2 text-sm font-bold text-white disabled:opacity-50" disabled={deleteMut.isPending || demoMode} onClick={() => deleteMut.mutate()}>
+                      {deleteMut.isPending ? "Deleting…" : "Yes, delete my data"}
+                    </button>
+                    <button type="button" className={btnGhost} onClick={() => setConfirmDelete(false)}>Keep my account</button>
+                  </div>
+                  {demoMode && <p className="mt-2 text-xs text-[var(--dim)]">The demo session has no account data to delete.</p>}
+                </div>
+              )}
+            </div>
+            <div className="h-4" />
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
 /* ---------------- Designed invoice preview ---------------- */
 
 function InvoicePreview({ inv, fromEmail, open, onClose }: { inv: Invoice; fromEmail: string | null; open: boolean; onClose: () => void }) {
@@ -3592,10 +3803,10 @@ function OwnerTab({ data, invalidate, inrRate, userId, accessToken }: { data: Da
         <SectionTitle>Business details &amp; reviewer demo</SectionTitle>
         <div className="mt-2 space-y-2 text-sm leading-relaxed text-[var(--dim)]">
           <p>
-            The public pages (About, Pricing, Contact, Terms, Privacy, Cancellation and Refunds, Shipping, Disclaimer), the footers and the Account page read the business name ({BUSINESS_CONFIG.businessName}), product name ({BUSINESS_CONFIG.productName}), address, phone, support email ({BUSINESS_CONFIG.supportEmail}), WhatsApp number and Razorpay.me link from the <strong>BUSINESS_CONFIG</strong> block at the top of the app code — all set to the real business details. Edit them there to change them everywhere at once. (The support email is separate from your owner sign-in, {OWNER_EMAIL}, which still gates this screen.)
+            The public pages (About, Pricing, Contact, Terms, Privacy, Cancellation and Refunds, Shipping, Disclaimer) and the footers read the business name ({BUSINESS_CONFIG.businessName}), product name ({BUSINESS_CONFIG.productName}), address, phone, support email ({BUSINESS_CONFIG.supportEmail}), WhatsApp number and Razorpay.me link from the <strong>BUSINESS_CONFIG</strong> block at the top of the app code — all set to the real business details. Edit them there to change them everywhere at once. (The support email is separate from your owner sign-in, {OWNER_EMAIL}, which still gates this screen.)
           </p>
           <p>
-            Reviewer demo account (for Razorpay's review): username <strong className="text-[var(--text)]">{DEMO_LOGIN.username}</strong>, password <strong className="text-[var(--text)]">{DEMO_LOGIN.password}</strong> — entered under “Reviewer demo sign-in” in the sign-in sheet. It opens a read-only demo session: the calculator, Plan and pricing, the Account page and all public pages are visible; nothing can be saved, bought or sent. Change the password or disable it in the DEMO_LOGIN block.
+            Reviewer demo account (for Razorpay's review): username <strong className="text-[var(--text)]">{DEMO_LOGIN.username}</strong>, password <strong className="text-[var(--text)]">{DEMO_LOGIN.password}</strong> — entered under “Reviewer demo sign-in” in the sign-in sheet. It opens a read-only demo session: the calculator, Plan and pricing, and all public pages are visible; nothing can be saved, bought or sent. Change the password or disable it in the DEMO_LOGIN block.
           </p>
         </div>
       </section>
@@ -3605,7 +3816,7 @@ function OwnerTab({ data, invalidate, inrRate, userId, accessToken }: { data: Da
 
 /* ---------------- Info pages (the eight public pages) ----------------
    Public: no login needed. Reached from the footer on every screen,
-   the Account page, the profile menu, the upgrade screen, or
+   the upgrade screen, or
    directly through the page's own #/page address in the app URL.
    The wording lives in the INFO_PAGES block at the top of this file
    so the owner can edit it in one place. "Back" returns to the
@@ -3655,311 +3866,12 @@ function LegalPage({ page, onBack }: { page: InfoPageKey; onBack: () => void }) 
   );
 }
 
-/* ---------------- Account page ----------------
-   Reached from the profile menu ("My account") — the bottom nav
-   stays at five tabs. One compact screen: identity card, the Pro
-   hero (plan, start, expiry, days left — or a strong Upgrade for
-   Free), subscription management (renew/extend, switch to Annual,
-   cancel, payment history with receipts), support, sign out,
-   delete account, and the public-page footer links. */
+/* Shared date helper: used by the Plan page (subscription dates) and the Settings sheet. */
 
 function fmtDateIN(iso: string | null): string {
   if (!iso) return "—";
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? "—" : d.toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" });
-}
-
-function AccountPage({ data, signedIn, demoMode, userId, accessToken, userName, userEmail, userAvatar, onOpenSignIn, onGoPlan, onOpenLegal, onSignOut, invalidate }: {
-  data: Dash;
-  signedIn: boolean;
-  demoMode: boolean;
-  userId: string | null;
-  accessToken: string | null;
-  userName: string | null;
-  userEmail: string | null;
-  userAvatar: string | null;
-  onOpenSignIn: () => void;
-  onGoPlan: () => void;
-  onOpenLegal: (page: InfoPageKey) => void;
-  onSignOut: () => void;
-  invalidate: () => void;
-}) {
-  const reduce = useReducedMotion();
-  const [confirmCancel, setConfirmCancel] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
-  const isPro = data.plan === "pro" || data.proActive;
-  const whatsappDigits = BUSINESS_CONFIG.whatsappNumber.replace(/\D/g, "");
-
-  const cancelMut = useMutation({
-    mutationFn: () => api.cancelPro({ userId: userId ?? "", accessToken: accessToken ?? undefined }),
-    onSuccess: (res) => {
-      setConfirmCancel(false);
-      invalidate();
-      toast.success(res.proExpiresAt
-        ? `Pro cancelled — it stays on until ${fmtDateIN(res.proExpiresAt)}. No refund is automatic; see the Refund Policy.`
-        : "Pro cancelled.");
-      sfx("success");
-    },
-    onError: () => { toast.error("Could not cancel just now. Try again."); sfx("error"); },
-  });
-  const deleteMut = useMutation({
-    mutationFn: () => api.deleteAccountData({ userId: userId ?? "", accessToken: accessToken ?? undefined }),
-    onSuccess: () => {
-      toast.success("Your account data in this app has been deleted.");
-      sfx("success");
-      onSignOut();
-    },
-    onError: () => { toast.error("Could not delete your data just now. Try again."); sfx("error"); },
-  });
-
-  const downloadReceipt = (label: string, lines: string[]) => {
-    downloadTextFile(`receipt-${label}.txt`, lines.join("\n"));
-  };
-
-  /* Payment history: verified/failed Razorpay payments plus the
-     user's manual submissions with their review state. Pending
-     checkout orders (started, never paid) are not payments and are
-     left out. */
-  const history: { key: string; date: string; amountInr: number; paymentId: string | null; status: string; billing: string }[] = [
-    ...data.proPayments
-      .filter((p) => p.status !== "pending")
-      .map((p) => ({
-        key: `pro-${p.id}`,
-        date: p.verifiedAt ?? p.createdAt,
-        amountInr: p.amountInr,
-        paymentId: p.paymentId,
-        status: p.status === "verified" ? "Paid" : "Failed",
-        billing: p.billing,
-      })),
-    ...data.manualPayments.map((m) => ({
-      key: `man-${m.id}`,
-      date: m.createdAt,
-      amountInr: (m.billing === "annual" ? PRICING.annual.price : PRICING.monthly.price),
-      paymentId: m.txnId,
-      status: m.status === "approved" ? "Paid" : m.status === "rejected" ? "Rejected" : "Pending review",
-      billing: m.billing,
-    })),
-  ].sort((a, b) => (a.date < b.date ? 1 : -1));
-
-  const expiringSoon = data.proActive && !data.proCancelled && data.proDaysLeft !== null && data.proDaysLeft <= 5;
-
-  return (
-    <div className="space-y-6">
-      <PageIntro
-        accent="all in one place."
-        description="Your plan, your payments and your support — one screen."
-        visual={<IntroMemberVisual />}
-      />
-
-      {!signedIn ? (
-        <section aria-label="Sign in" className="card p-5 text-center">
-          <p className="font-headline text-xl font-bold">Your account lives here</p>
-          <p className="mx-auto mt-1 max-w-sm text-sm leading-relaxed text-[var(--dim)]">Sign in with Google to see your plan, payments and subscription options. The public pages below need no account.</p>
-          <button type="button" className={btnPrimary + " mt-4 w-full sm:w-auto"} onClick={onOpenSignIn}>Sign in</button>
-        </section>
-      ) : (
-        <>
-          {/* Identity card */}
-          <motion.section {...itemAnim(0, reduce)} aria-label="Your account" className="card flex items-center gap-3.5 p-5">
-            {userAvatar ? (
-              <img src={userAvatar} alt="" width={52} height={52} className="h-[52px] w-[52px] flex-none rounded-full object-cover" referrerPolicy="no-referrer" />
-            ) : (
-              <span className="flex h-[52px] w-[52px] flex-none items-center justify-center rounded-full bg-[var(--surface-alt)] text-xl font-bold" aria-hidden>
-                {(userName ?? userEmail ?? "U").trim().charAt(0).toUpperCase()}
-              </span>
-            )}
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-lg font-bold" title={userName ?? undefined}>{userName ?? "Creator"}</p>
-              <p className="truncate text-sm text-[var(--dim)]" title={userEmail ?? undefined}>{userEmail}</p>
-              {demoMode && <p className="mt-0.5 text-xs font-medium text-[var(--amber)]">Demo session — read-only, nothing is saved.</p>}
-            </div>
-            <span className={`flex-none whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-bold ${isPro ? "bg-[var(--violet)] text-[var(--accent-ink)]" : "bg-[var(--surface-alt)] text-[var(--dim)]"}`}>
-              {isPro ? "PRO" : "FREE"}
-            </span>
-          </motion.section>
-
-          {/* Pro hero */}
-          {data.proActive ? (
-            <motion.section {...itemAnim(1, reduce)} aria-label="Your Pro plan" className="pro-card p-6">
-              <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <p className="text-[22px] font-bold">Pro — {data.proBilling === "annual" ? "Annual" : "Monthly"}</p>
-                <p className="tnum font-display text-3xl font-bold">{data.proDaysLeft} <span className="text-base font-semibold text-[var(--dim)]">{data.proDaysLeft === 1 ? "day" : "days"} left</span></p>
-              </div>
-              <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-                <div className="rounded-2xl bg-[var(--surface-alt)] p-3.5">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dim)]">Started</p>
-                  <p className="mt-1 font-bold">{fmtDateIN(data.proStartsAt)}</p>
-                </div>
-                <div className="rounded-2xl bg-[var(--surface-alt)] p-3.5">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-[var(--dim)]">Expires</p>
-                  <p className="mt-1 font-bold">{fmtDateIN(data.proExpiresAt)}</p>
-                </div>
-              </div>
-              <p className="mt-3 text-sm leading-relaxed text-[var(--dim)]">
-                {data.proCancelled
-                  ? "Cancelled — Pro stays on until the expiry date above, then your account returns to Free. Reminders are off and nothing was refunded automatically."
-                  : "A fixed-term pass — no auto-renewal. When it ends, your account returns to Free and you keep your saved rate cards."}
-              </p>
-              {expiringSoon && (
-                <p role="status" className="mt-3 rounded-2xl border border-[var(--amber)] bg-[var(--surface-alt)] px-3.5 py-2.5 text-sm font-semibold">
-                  Your Pro ends in {data.proDaysLeft} {data.proDaysLeft === 1 ? "day" : "days"} — renew below so nothing stops.
-                </p>
-              )}
-            </motion.section>
-          ) : (
-            <motion.section {...itemAnim(1, reduce)} aria-label="Upgrade to Pro" className="pro-card p-6">
-              <p className="text-[22px] font-bold">You're on Free</p>
-              <p className="mt-1 text-sm leading-relaxed text-[var(--dim)]">
-                Pro adds the brand finder, pitches from your Gmail, the deal pipeline and invoices — from {formatMoney(PRICING.monthly.price, "INR")}/month. It starts only after a verified payment; signing in never turns it on.
-              </p>
-              <button type="button" className={btnPrimary + " mt-4 w-full"} onClick={onGoPlan}>
-                Upgrade to Pro
-              </button>
-            </motion.section>
-          )}
-
-          {/* Manage subscription */}
-          <section aria-label="Manage subscription" className="card p-5">
-            <SectionTitle>Manage subscription</SectionTitle>
-            <div className="mt-3 space-y-2">
-              <button type="button" className={btnGhost + " w-full justify-between"} onClick={onGoPlan}>
-                <span>{data.proActive ? "Renew or Extend" : "See plans & upgrade"}</span>
-                <span aria-hidden>→</span>
-              </button>
-              {data.proActive && data.proBilling === "monthly" && (
-                <button type="button" className={btnGhost + " w-full justify-between"} onClick={onGoPlan}>
-                  <span>Switch Monthly to Annual — {formatMoney(PRICING.annual.price, "INR")}/year</span>
-                  <span aria-hidden>→</span>
-                </button>
-              )}
-              {data.proActive && !data.proCancelled && (
-                !confirmCancel ? (
-                  <button type="button" className={btnGhost + " w-full justify-between"} onClick={() => setConfirmCancel(true)}>
-                    <span>Cancel Pro</span>
-                    <span aria-hidden>→</span>
-                  </button>
-                ) : (
-                  <div className="rounded-2xl border border-[var(--amber)] bg-[var(--surface-alt)] px-4 py-3.5" role="alertdialog" aria-label="Confirm cancel Pro">
-                    <p className="text-sm leading-relaxed">
-                      Cancel Pro? Access stays until <strong>{fmtDateIN(data.proExpiresAt)}</strong>, reminders stop, and nothing is refunded automatically — refunds follow the Cancellation and Refund Policy.
-                    </p>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      <button type="button" className="btn-press inline-flex min-h-[44px] items-center rounded-xl bg-[var(--danger)] px-4 py-2 text-sm font-bold text-white disabled:opacity-50" disabled={cancelMut.isPending} onClick={() => cancelMut.mutate()}>
-                        {cancelMut.isPending ? "Cancelling…" : "Yes, cancel Pro"}
-                      </button>
-                      <button type="button" className={btnGhost} onClick={() => setConfirmCancel(false)}>Keep Pro</button>
-                    </div>
-                  </div>
-                )
-              )}
-            </div>
-
-            <div className="mt-5 border-t border-[var(--border)] pt-4">
-              <p className="text-sm font-bold">Payment history</p>
-              {history.length === 0 ? (
-                <p className="mt-2 text-sm text-[var(--dim)]">No payments yet. When you buy Pro, every payment shows here with its receipt.</p>
-              ) : (
-                <ul className="mt-2 divide-y divide-[var(--border)]">
-                  {history.map((h) => (
-                    <li key={h.key} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="tnum text-sm font-bold">
-                          {formatMoney(h.amountInr, "INR")} <span className="font-medium text-[var(--dim)]">· Pro {h.billing === "annual" ? "Annual" : "Monthly"}</span>
-                        </p>
-                        <p className="truncate text-xs text-[var(--dim)]" title={h.paymentId ?? undefined}>
-                          {fmtDateIN(h.date)}{h.paymentId ? ` · ID ${h.paymentId}` : ""}
-                        </p>
-                      </div>
-                      <span className={`flex-none whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-bold ${h.status === "Paid" ? "bg-[var(--accent)]/15 text-[var(--accent)]" : h.status === "Pending review" ? "bg-[var(--amber)]/15 text-[var(--amber)]" : "bg-[var(--surface-alt)] text-[var(--dim)]"}`}>
-                        {h.status}
-                      </span>
-                      {h.status === "Paid" && (
-                        <button
-                          type="button"
-                          className={btnSmall + " flex-none"}
-                          onClick={() => downloadReceipt(h.paymentId ?? h.key, [
-                            `${BUSINESS_CONFIG.businessName}`,
-                            `Payment receipt — ${BUSINESS_CONFIG.productName} Pro`,
-                            ``,
-                            `Plan: Pro ${h.billing === "annual" ? "Annual (365 days)" : "Monthly (30 days)"}`,
-                            `Amount paid: ${formatMoney(h.amountInr, "INR")}`,
-                            `Date: ${fmtDateIN(h.date)}`,
-                            h.paymentId ? `Razorpay payment ID: ${h.paymentId}` : null,
-                            `Billed to: ${userEmail ?? ""}`,
-                            `Status: Paid`,
-                            ``,
-                            SHIPPING_NOTE,
-                          ].filter((l) => l !== null) as string[])}
-                        >
-                          Download receipt
-                        </button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          </section>
-
-          {/* Support */}
-          <section aria-label="Support" className="card flex flex-wrap items-center gap-3 p-5">
-            <p className="min-w-0 flex-1 text-sm leading-relaxed">
-              <strong>Need help?</strong> <span className="text-[var(--dim)]">Write to us — we reply to every message.</span>
-            </p>
-            <div className="flex flex-none flex-wrap gap-2">
-              <a href={`mailto:${BUSINESS_CONFIG.supportEmail}`} className={btnSmall}>Email us</a>
-              {whatsappDigits ? (
-                <a href={`https://wa.me/${whatsappDigits}`} target="_blank" rel="noreferrer" className={btnSmall}>WhatsApp</a>
-              ) : null}
-            </div>
-            {!whatsappDigits && (
-              <p className="w-full text-xs text-[var(--dim)]">Email: {BUSINESS_CONFIG.supportEmail}</p>
-            )}
-          </section>
-
-          {/* Sign out / delete */}
-          <section aria-label="Account actions" className="space-y-2">
-            <button type="button" className={btnGhost + " w-full"} onClick={onSignOut}>Sign out</button>
-            {!confirmDelete ? (
-              <button type="button" className="btn-press flex min-h-[48px] w-full items-center justify-center rounded-2xl px-4 py-2.5 text-sm font-semibold text-[var(--danger)]" onClick={() => setConfirmDelete(true)}>
-                Delete account
-              </button>
-            ) : (
-              <div className="rounded-2xl border border-[var(--danger)] bg-[var(--surface-alt)] px-4 py-3.5" role="alertdialog" aria-label="Confirm delete account">
-                <p className="text-sm leading-relaxed">
-                  Delete your account data? This permanently removes your saved rate cards, brands, deals, invoices, drafts and payment records from this app. It cannot be undone. (Your Google account itself is not touched.)
-                </p>
-                <div className="mt-3 flex flex-wrap gap-2">
-                  <button type="button" className="btn-press inline-flex min-h-[44px] items-center rounded-xl bg-[var(--danger)] px-4 py-2 text-sm font-bold text-white disabled:opacity-50" disabled={deleteMut.isPending || demoMode} onClick={() => deleteMut.mutate()}>
-                    {deleteMut.isPending ? "Deleting…" : "Yes, delete my data"}
-                  </button>
-                  <button type="button" className={btnGhost} onClick={() => setConfirmDelete(false)}>Keep my account</button>
-                </div>
-                {demoMode && <p className="mt-2 text-xs text-[var(--dim)]">The demo session has no account data to delete.</p>}
-              </div>
-            )}
-          </section>
-        </>
-      )}
-
-      {/* Public pages footer */}
-      <footer className="border-t border-[var(--border)] pt-4">
-        <nav aria-label="About and policies" className="flex flex-wrap gap-x-4 gap-y-2">
-          {(Object.keys(INFO_PAGES) as InfoPageKey[]).map((key) => (
-            <button
-              key={key}
-              type="button"
-              className="btn-press min-h-[36px] text-[13px] font-medium text-[var(--dim)] underline-offset-2 hover:underline"
-              onClick={() => onOpenLegal(key)}
-            >
-              {INFO_PAGES[key].title}
-            </button>
-          ))}
-        </nav>
-        <p className="mt-3 text-xs leading-relaxed text-[var(--dim)]">{BUSINESS_CONFIG.businessName} · {SHIPPING_NOTE}</p>
-      </footer>
-    </div>
-  );
 }
 
 /* ---------------- Manual payment panel (Phase 1) ----------------
@@ -4291,6 +4203,51 @@ function PlanTab({ data, invalidate, signedIn, userId, accessToken, userEmail, u
     ? new Date(data.proExpiresAt).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
     : null;
 
+  /* Manage subscription (moved here from the removed Account page):
+     cancel Pro and the payment history with receipts live on the
+     Plan page now, so nothing is lost when the Account Center goes. */
+  const [confirmCancel, setConfirmCancel] = useState(false);
+  const cancelMut = useMutation({
+    mutationFn: () => api.cancelPro({ userId: userId ?? "", accessToken: accessToken ?? undefined }),
+    onSuccess: (res) => {
+      setConfirmCancel(false);
+      invalidate();
+      toast.success(res.proExpiresAt
+        ? `Pro cancelled — it stays on until ${fmtDateIN(res.proExpiresAt)}. No refund is automatic; see the Refund Policy.`
+        : "Pro cancelled.");
+      sfx("success");
+    },
+    onError: () => { toast.error("Could not cancel just now. Try again."); sfx("error"); },
+  });
+  const downloadReceipt = (label: string, lines: string[]) => {
+    downloadTextFile(`receipt-${label}.txt`, lines.join("\n"));
+  };
+  /* Payment history: verified/failed Razorpay payments plus the
+     user's manual submissions with their review state. Pending
+     checkout orders (started, never paid) are not payments and are
+     left out. */
+  const history: { key: string; date: string; amountInr: number; paymentId: string | null; status: string; billing: string }[] = [
+    ...data.proPayments
+      .filter((p) => p.status !== "pending")
+      .map((p) => ({
+        key: `pro-${p.id}`,
+        date: p.verifiedAt ?? p.createdAt,
+        amountInr: p.amountInr,
+        paymentId: p.paymentId,
+        status: p.status === "verified" ? "Paid" : "Failed",
+        billing: p.billing,
+      })),
+    ...data.manualPayments.map((m) => ({
+      key: `man-${m.id}`,
+      date: m.createdAt,
+      amountInr: (m.billing === "annual" ? PRICING.annual.price : PRICING.monthly.price),
+      paymentId: m.txnId,
+      status: m.status === "approved" ? "Paid" : m.status === "rejected" ? "Rejected" : "Pending review",
+      billing: m.billing,
+    })),
+  ].sort((a, b) => (a.date < b.date ? 1 : -1));
+  const showManage = signedIn && (data.proActive || history.length > 0);
+
   /* Notify-me state: shown only while the Razorpay keys are missing
      (the "Pro opens soon" state). The email is kept on this device
      until the owner wires a real waitlist. */
@@ -4517,6 +4474,93 @@ function PlanTab({ data, invalidate, signedIn, userId, accessToken, userEmail, u
           </p>
         )}
       </section>
+      {showManage && (
+        <section aria-label="Manage subscription" className="card p-5">
+          <SectionTitle>Manage subscription</SectionTitle>
+          {data.proActive && (
+            <div className="mt-3 space-y-1.5 text-sm">
+              <p className="flex justify-between gap-3"><span className="text-[var(--dim)]">Plan</span><span className="font-bold">{data.proBilling === "annual" ? "Pro — Annual" : "Pro — Monthly"}</span></p>
+              <p className="flex justify-between gap-3"><span className="text-[var(--dim)]">Started</span><span className="font-bold">{fmtDateIN(data.proStartsAt)}</span></p>
+              <p className="flex justify-between gap-3"><span className="text-[var(--dim)]">Expires</span><span className="font-bold">{fmtDateIN(data.proExpiresAt)}</span></p>
+              {data.proDaysLeft !== null && (
+                <p className="flex justify-between gap-3"><span className="text-[var(--dim)]">Days left</span><span className="font-bold">{data.proDaysLeft}</span></p>
+              )}
+            </div>
+          )}
+          {data.proActive && !data.proCancelled && (
+            <div className="mt-4">
+              {!confirmCancel ? (
+                <button type="button" className={btnGhost + " w-full justify-between"} onClick={() => setConfirmCancel(true)}>
+                  <span>Cancel Pro</span>
+                  <span aria-hidden>→</span>
+                </button>
+              ) : (
+                <div className="rounded-2xl border border-[var(--amber)] bg-[var(--surface-alt)] px-4 py-3.5" role="alertdialog" aria-label="Confirm cancel Pro">
+                  <p className="text-sm leading-relaxed">
+                    Cancel Pro? Access stays until <strong>{fmtDateIN(data.proExpiresAt)}</strong>, reminders stop, and nothing is refunded automatically — refunds follow the Cancellation and Refund Policy.
+                  </p>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button type="button" className="btn-press inline-flex min-h-[44px] items-center rounded-xl bg-[var(--danger)] px-4 py-2 text-sm font-bold text-white disabled:opacity-50" disabled={cancelMut.isPending} onClick={() => cancelMut.mutate()}>
+                      {cancelMut.isPending ? "Cancelling…" : "Yes, cancel Pro"}
+                    </button>
+                    <button type="button" className={btnGhost} onClick={() => setConfirmCancel(false)}>Keep Pro</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+          {data.proActive && data.proCancelled && (
+            <p className="mt-3 text-sm leading-relaxed text-[var(--dim)]">
+              Cancelled — Pro stays on until {fmtDateIN(data.proExpiresAt)}, then your account returns to Free. Reminders are off and nothing was refunded automatically.
+            </p>
+          )}
+          <div className="mt-5 border-t border-[var(--border)] pt-4">
+            <p className="text-sm font-bold">Payment history</p>
+            {history.length === 0 ? (
+              <p className="mt-2 text-sm text-[var(--dim)]">No payments yet. When you buy Pro, every payment shows here with its receipt.</p>
+            ) : (
+              <ul className="mt-2 divide-y divide-[var(--border)]">
+                {history.map((h) => (
+                  <li key={h.key} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="tnum text-sm font-bold">
+                        {formatMoney(h.amountInr, "INR")} <span className="font-medium text-[var(--dim)]">· Pro {h.billing === "annual" ? "Annual" : "Monthly"}</span>
+                      </p>
+                      <p className="truncate text-xs text-[var(--dim)]" title={h.paymentId ?? undefined}>
+                        {fmtDateIN(h.date)}{h.paymentId ? ` · ID ${h.paymentId}` : ""}
+                      </p>
+                    </div>
+                    <span className={`flex-none whitespace-nowrap rounded-full px-2.5 py-1 text-[11px] font-bold ${h.status === "Paid" ? "bg-[var(--accent)]/15 text-[var(--accent)]" : h.status === "Pending review" ? "bg-[var(--amber)]/15 text-[var(--amber)]" : "bg-[var(--surface-alt)] text-[var(--dim)]"}`}>
+                      {h.status}
+                    </span>
+                    {h.status === "Paid" && (
+                      <button
+                        type="button"
+                        className={btnSmall + " flex-none"}
+                        onClick={() => downloadReceipt(h.paymentId ?? h.key, [
+                          `${BUSINESS_CONFIG.businessName}`,
+                          `Payment receipt — ${BUSINESS_CONFIG.productName} Pro`,
+                          ``,
+                          `Plan: Pro ${h.billing === "annual" ? "Annual (365 days)" : "Monthly (30 days)"}`,
+                          `Amount paid: ${formatMoney(h.amountInr, "INR")}`,
+                          `Date: ${fmtDateIN(h.date)}`,
+                          h.paymentId ? `Razorpay payment ID: ${h.paymentId}` : null,
+                          `Billed to: ${userEmail ?? ""}`,
+                          `Status: Paid`,
+                          ``,
+                          SHIPPING_NOTE,
+                        ].filter((l) => l !== null) as string[])}
+                      >
+                        Download receipt
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </section>
+      )}
     </div>
   );
 }
