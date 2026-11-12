@@ -59,6 +59,8 @@ const EXCLUDED_LOCAL = [
   "postmaster",
   "webmaster",
   "admin",
+  "feedback",
+  "app-feedback",
   "noreply",
   "no-reply",
   "donotreply",
@@ -292,7 +294,7 @@ async function fetchPageText(url: string): Promise<string | null> {
     const type = res.headers.get("content-type") ?? "";
     if (!/html|text/.test(type)) return null;
     const text = await res.text();
-    return text.slice(0, 500_000);
+    return text.slice(0, 1_000_000);
   } catch {
     return null;
   }
@@ -433,7 +435,11 @@ export async function discoverBrandEmails(input: {
 
   // 3. Validate, categorize and score.
   const brandHost = website
-    ? website.replace(/^https?:\/\//, "").split("/")[0].toLowerCase()
+    ? website
+        .replace(/^https?:\/\//, "")
+        .split("/")[0]
+        .toLowerCase()
+        .replace(/^www\./, "")
     : null;
   const scored: DiscoveredContact[] = [];
   for (const [email, meta] of found) {

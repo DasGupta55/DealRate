@@ -235,6 +235,50 @@ export async function researchBrand(
     contactPageUrl = null;
   }
 
+  // Fallback: nothing on the brand's own pages. Search the wider web
+  // specifically for the brand's contact email — business directories
+  // and listings often publish a general official email the brand's
+  // own site does not (for example a business@ address). Only runs
+  // when the first pass found nothing, so brands that do publish an
+  // email do not pay for the extra search.
+  if (contacts.length === 0) {
+    try {
+      const emailQueries = [
+        `${name} contact email`,
+        `${name} business email partnerships`,
+      ];
+      const emailSettled = await Promise.allSettled(
+        emailQueries.map((q) => searchTavily(ctx.env.tavilyApiKey ?? "", q)),
+      );
+      const emailResults: TavilyResult[] = emailSettled.flatMap((s) =>
+        s.status === "fulfilled" ? s.value : [],
+      );
+      if (emailResults.length > 0) {
+        const discovered2 = await discoverBrandEmails({
+          brandName: name,
+          website: distilled.website ?? brand?.website ?? null,
+          candidatePages: emailResults.map((r) => ({
+            url: r.url ?? "",
+            title: r.title ?? "",
+            content: r.content ?? "",
+          })),
+        });
+        contacts = discovered2.contacts.map((c) => ({
+          id: null,
+          email: c.email,
+          category: c.category,
+          sourceUrl: c.sourceUrl,
+          rankScore: c.rankScore,
+          mxVerified: c.mxVerified,
+        }));
+        phones = [...phones, ...discovered2.phones];
+        if (!contactPageUrl) contactPageUrl = discovered2.contactPageUrl;
+      }
+    } catch {
+      // Best-effort fallback — the research still stands without contacts.
+    }
+  }
+
   const research: BrandResearch = {
     website: distilled.website ?? brand?.website ?? null,
     products: distilled.products ?? null,
