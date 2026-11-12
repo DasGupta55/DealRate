@@ -474,10 +474,20 @@ export async function discoverBrandEmails(input: {
  *  and with a meaningful positive score — a lone low-scoring address
  *  (e.g. a generic address on a free-mail domain) is not a good
  *  enough match to fill in on the creator's behalf. Returns null
- *  when nothing suitable exists. */
+ *  when nothing suitable exists.
+ *
+ *  Fallback: when no influencer / marketing / general address clears
+ *  the bar, use the best remaining real address (for example a named
+ *  person on the brand's own domain) so the deal still gets the
+ *  brand's official email instead of an empty box — but never a
+ *  free-mail address, which is not an official brand contact. */
 export function bestContact(contacts: DiscoveredContact[]): DiscoveredContact | null {
   const usable = contacts.filter(
     (c) => c.mxVerified !== false && c.rankScore >= 10,
   );
-  return usable[0] ?? null;
+  if (usable.length > 0) return usable[0] ?? null;
+  const fallback = contacts.filter(
+    (c) => c.mxVerified !== false && !FREE_PROVIDERS.has(domainOf(c.email)),
+  );
+  return fallback[0] ?? null;
 }

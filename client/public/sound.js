@@ -29,7 +29,7 @@
   "use strict";
 
   var STORAGE_KEY = "bpt-sound-muted";
-  var BASE_GAIN = 0.2; // low volume: every sound peaks between 0.15 and 0.25
+  var BASE_GAIN = 0.6; // loud enough to hear at normal phone volume (was 0.2 — too quiet)
 
   /* ---------- mute state (localStorage, default ON) ---------- */
   var muted = false;
@@ -126,22 +126,22 @@
         frequency: 640 * jitter,
         frequencyEnd: 340 * jitter,
         duration: 0.06,
-        peak: 0.22,
+        peak: 0.7,
       });
       vibrate();
     },
     success: function () {
       // Two rising notes (E5 -> B5), ~250 ms in total.
-      tone({ frequency: 659.25, duration: 0.11, peak: 0.2 });
-      tone({ frequency: 987.77, duration: 0.14, peak: 0.2, delay: 0.11 });
+      tone({ frequency: 659.25, duration: 0.11, peak: 0.6 });
+      tone({ frequency: 987.77, duration: 0.14, peak: 0.6, delay: 0.11 });
     },
     error: function () {
       // A soft low bump — low sine, gentle sweep down, never harsh.
-      tone({ frequency: 170, frequencyEnd: 110, duration: 0.15, peak: 0.18 });
+      tone({ frequency: 170, frequencyEnd: 110, duration: 0.15, peak: 0.55 });
     },
     toggle: function () {
       // A tiny tick.
-      tone({ frequency: 1350, frequencyEnd: 900, duration: 0.035, peak: 0.15 });
+      tone({ frequency: 1350, frequencyEnd: 900, duration: 0.035, peak: 0.6 });
       vibrate();
     },
   };

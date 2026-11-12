@@ -191,12 +191,12 @@ export function buildDistillPrompt(
     `RULES:`,
     `1. Only real companies that sell a product or service in this niche. A brand SELLS something (food, clothes, phones). An agency's business is connecting brands with creators — if its main work is matchmaking, it is an agency, not a brand. Never list articles, publications, listicles, agencies or marketplaces as brands — those go in "agencies".`,
     `2. Gifting, barter or affiliate is NOT paid sponsorship — classify as affiliate_only or potential, never verified_paid.`,
-    `3. Classify honestly from the evidence only: verified_paid (proof of paid work with ${country} creators), active_program (an active paid program open to ${country} creators), international_paid (foreign company with paid work targeting ${country}), potential (contact exists but paid work unconfirmed — use this when unsure), affiliate_only (affiliate only, no fixed fee).`,
+    `3. Classify honestly from the evidence only: verified_paid (proof of paid work with ${country} creators), active_program (an active paid program open to ${country} creators), international_paid (foreign company with paid work targeting ${country}), potential (contact exists but paid work unconfirmed — use this when unsure), affiliate_only (affiliate only, no fixed fee). A brand does NOT need a dedicated influencer-marketing webpage to qualify — a sponsored video or post, a named creator collaboration, a creator or ambassador program mention, or a partnerships page is enough evidence. If creator work is shown but no formal paid program, use potential (or verified_paid when payment is clearly shown); do not drop the brand just for lacking a program page.`,
     `4. For each brand give: website, HQ country, industry, one evidence sentence, example creator/campaign if named, platform, date if stated, evidence link, partnership page link. Leave a field null when the results don't state it — never guess.`,
-    `5. Rank by evidence strength, verified first. Return at most 8 brands and 4 agencies. Fewer is fine — don't pad with weak matches.`,
+    `5. Rank by evidence strength, verified first. Return at most 8 brands and 4 agencies. Fewer is fine — don't pad with weak matches. Also list up to 6 companies you considered but rejected, each with a one-line reason (for example: no paid evidence, agency, not in this niche, duplicate, not a brand) — this "rejected" list is only for diagnostics, it is never shown to the creator.`,
     ``,
     `Return JSON in exactly this shape:`,
-    `{"brands": [{"name": "...", "website": "...", "hqCountry": "...", "industry": "...", "classification": "verified_paid|active_program|international_paid|potential|affiliate_only", "evidence": "...", "exampleCreator": "...", "platform": "...", "evidenceDate": "...", "evidenceUrl": "...", "partnershipUrl": "...", "why": "...", "sourceUrl": "..."}], "agencies": [{"name": "...", "website": "...", "why": "...", "sourceUrl": "..."}]}`,
+    `{"brands": [{"name": "...", "website": "...", "hqCountry": "...", "industry": "...", "classification": "verified_paid|active_program|international_paid|potential|affiliate_only", "evidence": "...", "exampleCreator": "...", "platform": "...", "evidenceDate": "...", "evidenceUrl": "...", "partnershipUrl": "...", "why": "...", "sourceUrl": "..."}], "agencies": [{"name": "...", "website": "...", "why": "...", "sourceUrl": "..."}], "rejected": [{"name": "...", "reason": "..."}]}`,
     ``,
     `Search results:`,
     results
@@ -258,6 +258,7 @@ export async function distillSponsorshipResults(
       sourceUrl?: string | null;
       url?: string | null;
     }[];
+    rejected?: { name?: string; reason?: string }[];
   } | null = null;
   for (let attempt = 0; attempt < 2 && !distilled; attempt++) {
     try {
@@ -271,6 +272,7 @@ export async function distillSponsorshipResults(
           sourceUrl?: string | null;
           url?: string | null;
         }[];
+        rejected?: { name?: string; reason?: string }[];
       }>(env, DISTILL_SYSTEM, buildDistillPrompt(niche, country, top), {
         // The distillation returns up to 8 brands + 4 agencies of
         // JSON. Keep the prompt and the answer short on purpose: a
@@ -296,15 +298,23 @@ export async function distillSponsorshipResults(
     const brands: DiscoveredBrand[] = [];
     let rejectedDup = 0;
     let rejectedNonBrand = 0;
+    let rejectedNoName = 0;
+    const rejectedDupNames: string[] = [];
+    const rejectedNonBrandNames: string[] = [];
     for (const b of distilled.brands ?? []) {
       const name = (b.name ?? "").trim();
-      if (!name) continue;
+      if (!name) {
+        rejectedNoName++;
+        continue;
+      }
       if (seen.has(name.toLowerCase())) {
         rejectedDup++;
+        rejectedDupNames.push(name);
         continue;
       }
       if (isNonBrand(name, b.sourceUrl ?? b.url ?? null)) {
         rejectedNonBrand++;
+        rejectedNonBrandNames.push(name);
         continue;
       }
       seen.add(name.toLowerCase());
@@ -353,9 +363,23 @@ export async function distillSponsorshipResults(
       });
     }
     discovery = { brands: brands.slice(0, 8), agencies: agencies.slice(0, 4) };
+    // Rejection diagnostics: which names the server dropped, and
+    // which candidates the AI itself considered but rejected (with
+    // its one-line reason). Together with the tavily rawUrls count
+    // this shows where brands are lost: discovery, AI filtering,
+    // or server-side dedupe.
+    const aiRejected = (distilled.rejected ?? [])
+      .map((r) => `${(r.name ?? "").trim()} (${(r.reason ?? "").trim() || "no reason"})`)
+      .filter((s) => s.length > 3)
+      .slice(0, 6);
     console.log(
-      `[brand-finder] distill aiBrands=${(distilled.brands ?? []).length} kept=${discovery.brands.length} rejectedDup=${rejectedDup} rejectedNonBrand=${rejectedNonBrand} agencies=${discovery.agencies.length} niche=${niche} market=${country}`,
+      `[brand-finder] distill aiBrands=${(distilled.brands ?? []).length} kept=${discovery.brands.length} rejectedDup=${rejectedDup} rejectedNonBrand=${rejectedNonBrand} rejectedNoName=${rejectedNoName} agencies=${discovery.agencies.length} niche=${niche} market=${country}`,
     );
+    if (rejectedDupNames.length > 0 || rejectedNonBrandNames.length > 0 || aiRejected.length > 0) {
+      console.log(
+        `[brand-finder] rejected dup=[${rejectedDupNames.join(", ")}] nonBrand=[${rejectedNonBrandNames.join(", ")}] ai=[${aiRejected.join(" | ")}] niche=${niche} market=${country}`,
+      );
+    }
   }
   return discovery;
 }
