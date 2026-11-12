@@ -1841,6 +1841,113 @@ export function App() {
             {isPro ? "Manage plan" : "Upgrade to Pro"}
           </button>
         </div>
+        {/* Profile — bottom of the sidebar on desktop. Opens the same
+            profile menu as the header avatar (which is hidden on
+            desktop); the header avatar stays for phones. The menu
+            opens upward from here, so it is fixed-positioned. */}
+        {signedIn && userEmail ? (
+          <div className="relative mt-3">
+            <button
+              type="button"
+              onClick={() => setProfileMenuOpen((open) => !open)}
+              aria-label={`Profile menu — signed in as ${userEmail}`}
+              aria-haspopup="menu"
+              aria-expanded={profileMenuOpen}
+              className="btn-press flex w-full items-center gap-3 rounded-2xl px-2.5 py-2 text-left transition-colors hover:bg-[var(--surface-alt)]"
+            >
+              <UserAvatar name={userName} email={userEmail} avatarUrl={userAvatar} size={36} />
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-bold">{userName ?? userEmail}</span>
+                <span className="block truncate text-xs text-[var(--dim)]">{isPro ? "Pro" : "Free plan"}</span>
+              </span>
+            </button>
+            <AnimatePresence>
+              {profileMenuOpen && (
+                <>
+                  <button
+                    type="button"
+                    aria-label="Close profile menu"
+                    data-sound="none"
+                    className="fixed inset-0 z-40 cursor-default"
+                    onClick={() => setProfileMenuOpen(false)}
+                  />
+                  <motion.div
+                    role="menu"
+                    aria-label="Profile"
+                    initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: 6 }}
+                    animate={reduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 }}
+                    exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.96, y: 6 }}
+                    transition={{ duration: 0.15, ease: "easeOut" }}
+                    style={{ transformOrigin: "bottom left" }}
+                    className="fixed bottom-24 left-4 z-50 w-[288px] max-w-[calc(100vw-2rem)] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-1.5 shadow-[0_16px_40px_rgba(0,0,0,0.5)]"
+                  >
+                    <div className="flex items-center gap-3 px-2.5 pb-2.5 pt-2">
+                      <UserAvatar name={userName} email={userEmail} avatarUrl={userAvatar} size={44} />
+                      <div className="min-w-0 flex-1">
+                        <p className="flex items-center gap-2 text-[15px] font-bold" title={userName ?? undefined}>
+                          <span className="min-w-0 truncate">{userName ?? userEmail}</span>
+                          <span className={`flex-none rounded-full px-2 py-0.5 text-[11px] font-bold ${isPro ? "bg-[var(--violet)] text-[var(--accent-ink)]" : "bg-[var(--surface-alt)] text-[var(--dim)]"}`}>
+                            {isPro ? "PRO" : "FREE"}
+                          </span>
+                        </p>
+                        <p className="truncate text-[13px] text-[var(--dim)]" title={userEmail}>{userEmail}</p>
+                        <p className="mt-0.5 truncate text-xs font-medium text-[var(--dim)]">
+                          {displayData.proActive && menuExpiryLabel
+                            ? `Pro — ends ${menuExpiryLabel}`
+                            : displayData.plan === "pro"
+                              ? "Pro — on for this workspace"
+                              : "Free plan"}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="border-t border-[var(--border)] pt-1.5">
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="btn-press flex min-h-[44px] w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold transition-colors hover:bg-[var(--surface-alt)]"
+                        onClick={() => { setProfileMenuOpen(false); setSettingsOpen(true); }}
+                      >
+                        <span className="flex-none text-[var(--dim)]"><IconSettings size={18} /></span>
+                        Settings
+                      </button>
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="btn-press flex min-h-[44px] w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold transition-colors hover:bg-[var(--surface-alt)]"
+                        onClick={() => { setProfileMenuOpen(false); setTab("plan"); }}
+                      >
+                        <span className="flex-none text-[var(--dim)]"><IconCrown /></span>
+                        Manage subscription
+                      </button>
+                      {isOwner && (
+                        <button
+                          type="button"
+                          role="menuitem"
+                          className="btn-press flex min-h-[44px] w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold transition-colors hover:bg-[var(--surface-alt)]"
+                          onClick={() => { setProfileMenuOpen(false); setTab("owner"); }}
+                        >
+                          <span className="flex-none text-[var(--dim)]"><IconLock /></span>
+                          Owner Console
+                        </button>
+                      )}
+                    </div>
+                    <div className="border-t border-[var(--border)] pt-1.5">
+                      <button
+                        type="button"
+                        role="menuitem"
+                        className="btn-press flex min-h-[44px] w-full items-center gap-3 rounded-xl px-3 text-left text-sm font-semibold text-[var(--danger)] transition-colors hover:bg-[var(--danger)]/10"
+                        onClick={handleSignOut}
+                      >
+                        <span className="flex-none"><IconLogout size={18} /></span>
+                        Sign out
+                      </button>
+                    </div>
+                  </motion.div>
+                </>
+              )}
+            </AnimatePresence>
+          </div>
+        ) : null}
       </nav>
       <main className="mx-auto w-full max-w-3xl px-4 pb-28 lg:ml-64 lg:max-w-5xl lg:px-8 lg:pb-10">
         <motion.header
@@ -1861,7 +1968,7 @@ export function App() {
             <div className="flex items-center gap-2">
             <SoundMuteButton />
             {signedIn && userEmail ? (
-              <div className="relative flex-none">
+              <div className="relative flex-none lg:hidden">
                 <button
                   type="button"
                   onClick={() => setProfileMenuOpen((open) => !open)}
