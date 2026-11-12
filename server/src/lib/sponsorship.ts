@@ -193,7 +193,7 @@ export function buildDistillPrompt(
     `2. Gifting, barter or affiliate is NOT paid sponsorship — classify as affiliate_only or potential, never verified_paid.`,
     `3. Classify honestly from the evidence only: verified_paid (proof of paid work with ${country} creators), active_program (an active paid program open to ${country} creators), international_paid (foreign company with paid work targeting ${country}), potential (contact exists but paid work unconfirmed — use this when unsure), affiliate_only (affiliate only, no fixed fee).`,
     `4. For each brand give: website, HQ country, industry, one evidence sentence, example creator/campaign if named, platform, date if stated, evidence link, partnership page link. Leave a field null when the results don't state it — never guess.`,
-    `5. Rank by evidence strength, verified first. Return at most 6 brands and 3 agencies. Fewer is fine — don't pad with weak matches.`,
+    `5. Rank by evidence strength, verified first. Return at most 8 brands and 4 agencies. Fewer is fine — don't pad with weak matches.`,
     ``,
     `Return JSON in exactly this shape:`,
     `{"brands": [{"name": "...", "website": "...", "hqCountry": "...", "industry": "...", "classification": "verified_paid|active_program|international_paid|potential|affiliate_only", "evidence": "...", "exampleCreator": "...", "platform": "...", "evidenceDate": "...", "evidenceUrl": "...", "partnershipUrl": "...", "why": "...", "sourceUrl": "..."}], "agencies": [{"name": "...", "website": "...", "why": "...", "sourceUrl": "..."}]}`,
@@ -272,10 +272,10 @@ export async function distillSponsorshipResults(
           url?: string | null;
         }[];
       }>(env, DISTILL_SYSTEM, buildDistillPrompt(niche, country, top), {
-        // The distillation returns up to 6 brands + 3 agencies of
+        // The distillation returns up to 8 brands + 4 agencies of
         // JSON. Keep the prompt and the answer short on purpose: a
         // long detailed prompt plus a 3500-token reply made the
-        // search run ~25-30s and time out. 12 results in, 6 brands
+        // search run ~25-30s and time out. 12 results in, 8 brands
         // out, 2500 tokens is enough room for the full answer and
         // keeps the whole search to a few seconds. Other AI calls
         // keep their own budgets.
@@ -294,10 +294,19 @@ export async function distillSponsorshipResults(
   if (distilled) {
     const seen = new Set<string>();
     const brands: DiscoveredBrand[] = [];
+    let rejectedDup = 0;
+    let rejectedNonBrand = 0;
     for (const b of distilled.brands ?? []) {
       const name = (b.name ?? "").trim();
-      if (!name || seen.has(name.toLowerCase())) continue;
-      if (isNonBrand(name, b.sourceUrl ?? b.url ?? null)) continue;
+      if (!name) continue;
+      if (seen.has(name.toLowerCase())) {
+        rejectedDup++;
+        continue;
+      }
+      if (isNonBrand(name, b.sourceUrl ?? b.url ?? null)) {
+        rejectedNonBrand++;
+        continue;
+      }
       seen.add(name.toLowerCase());
       const classification = toClassification(b.classification);
       // A brand the AI put in a paid category without any evidence
@@ -344,6 +353,9 @@ export async function distillSponsorshipResults(
       });
     }
     discovery = { brands: brands.slice(0, 8), agencies: agencies.slice(0, 4) };
+    console.log(
+      `[brand-finder] distill aiBrands=${(distilled.brands ?? []).length} kept=${discovery.brands.length} rejectedDup=${rejectedDup} rejectedNonBrand=${rejectedNonBrand} agencies=${discovery.agencies.length} niche=${niche} market=${country}`,
+    );
   }
   return discovery;
 }
@@ -359,18 +371,37 @@ export async function discoverSponsorshipBrands(
   country: string,
 ): Promise<{ discovery: SponsorshipDiscovery; raw: TavilyResult[] }> {
   const queries = sponsorshipQueries(niche, country);
+  const t0 = Date.now();
   const settled = await Promise.allSettled(
     queries.map((q) => searchTavily(env.tavilyApiKey ?? "", q)),
   );
+  const tavilyMs = Date.now() - t0;
+  const perQuery: TavilyResult[][] = settled.map((s) =>
+    s.status === "fulfilled" ? s.value : [],
+  );
+  const tavilyFailed = settled.filter((s) => s.status === "rejected").length;
+  // Interleave the three angles round-robin so all of them contribute
+  // to the results Groq sees. Before this, the first query's 10
+  // results filled almost the whole 12-result window and the third
+  // angle's results were dropped unseen.
   const byUrl = new Map<string, TavilyResult>();
-  for (const s of settled) {
-    if (s.status !== "fulfilled") continue;
-    for (const r of s.value) {
-      if (!r.url || byUrl.has(r.url)) continue;
+  const maxLen = Math.max(0, ...perQuery.map((r) => r.length));
+  for (let i = 0; i < maxLen; i++) {
+    for (const results of perQuery) {
+      const r = results[i];
+      if (!r?.url || byUrl.has(r.url)) continue;
       byUrl.set(r.url, r);
     }
   }
   const raw = [...byUrl.values()];
+  console.log(
+    `[brand-finder] tavily ${tavilyMs}ms failed=${tavilyFailed} rawUrls=${raw.length} niche=${niche} market=${country}`,
+  );
+  const g0 = Date.now();
   const discovery = await distillSponsorshipResults(env, niche, country, raw);
+  const totalMs = Date.now() - t0;
+  console.log(
+    `[brand-finder] groq ${Date.now() - g0}ms total ${totalMs}ms brands=${discovery.brands.length} agencies=${discovery.agencies.length} niche=${niche} market=${country}`,
+  );
   return { discovery, raw };
 }

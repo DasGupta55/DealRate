@@ -28,7 +28,12 @@ export async function searchTavily(
         search_depth: "basic",
         max_results: 10,
       }),
-      signal: AbortSignal.timeout(30000),
+      // A slow search call must fail fast, not eat the whole
+      // function budget: the three angles run concurrently and the
+      // whole search has ~15s before Netlify kills it. 8s is enough
+      // for a basic Tavily call; a slower one is dropped and the
+      // other angles' results are still used (allSettled).
+      signal: AbortSignal.timeout(8000),
     });
   } catch {
     throw new Error(
