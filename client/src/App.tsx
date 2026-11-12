@@ -1779,7 +1779,50 @@ export function App() {
           },
         }}
       />
-      <main className="mx-auto w-full max-w-3xl px-4 pb-28">
+      {/* Desktop sidebar — wide screens only. Same five sections as the
+          mobile bottom nav, reusing the same tabs state. Hidden on
+          phones, where the bottom nav stays. */}
+      <nav aria-label="Main sections" className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-[var(--border)] bg-[var(--surface)] px-3 py-5 lg:flex">
+        <button
+          type="button"
+          onClick={() => setTab("price")}
+          className="btn-press mb-6 flex items-center gap-2 px-3 text-left"
+          aria-label="DealRate — go to Price"
+        >
+          <span className="text-xl font-extrabold tracking-tight text-[var(--text)]">
+            Deal<span className="text-[var(--accent)]">Rate</span>
+          </span>
+        </button>
+        {tabs.map((t) => {
+          const TabIcon = t.icon;
+          const active = tab === t.key;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              aria-label={t.ariaLabel}
+              aria-current={active ? "page" : undefined}
+              onClick={() => setTab(t.key)}
+              className={`btn-press relative mb-1 flex min-h-[48px] items-center gap-3 rounded-2xl px-3.5 text-sm font-bold ${active ? "text-[var(--accent)]" : "text-[var(--dim)]"}`}
+            >
+              {active && (
+                <motion.span
+                  layoutId="nav-pill-desktop"
+                  aria-hidden
+                  className="absolute inset-0 rounded-2xl border border-[var(--accent)]/40 bg-[var(--accent)]/12"
+                  transition={SPRING_PILL}
+                />
+              )}
+              <span className="relative"><TabIcon /></span>
+              <span className="relative leading-none">{t.label}</span>
+              {t.badge ? (
+                <span className="relative ml-auto whitespace-nowrap rounded-full bg-[var(--danger)] px-1.5 text-[11px] font-bold text-white">{t.badge}</span>
+              ) : null}
+            </button>
+          );
+        })}
+      </nav>
+      <main className="mx-auto w-full max-w-3xl px-4 pb-28 lg:ml-60 lg:pb-10">
         <motion.header
           className="pt-5 pb-4"
           initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 14 }}
@@ -2078,7 +2121,7 @@ export function App() {
         </footer>
       </main>
 
-      <nav aria-label="Main sections" className="glass-nav fixed inset-x-0 bottom-0 border-t border-[var(--border)] pb-safe">
+      <nav aria-label="Main sections" className="glass-nav fixed inset-x-0 bottom-0 border-t border-[var(--border)] pb-safe lg:hidden">
         <div className="mx-auto grid max-w-3xl grid-cols-5 px-1 pt-1">
           {tabs.map((t) => {
             const TabIcon = t.icon;

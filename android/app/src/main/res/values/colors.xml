@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- DealRate dark fintech palette, matching the website. -->
+    <color name="background">#0A0A0F</color>
+    <color name="card">#14141B</color>
+    <color name="accent">#C8FF3D</color>
+    <color name="pro_accent">#7C5CFF</color>
+    <color name="text_primary">#FFFFFF</color>
+</resources>

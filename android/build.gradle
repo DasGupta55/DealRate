@@ -1,0 +1,8 @@
+// Top-level build file for the DealRate Android wrapper.
+// This project is a thin WebView shell around the live DealRate
+// website (https://dealrate2.netlify.app). It does NOT duplicate any
+// app logic, database, or backend — the website is the single
+// source of truth, and the APK always loads the live site.
+plugins {
+    id 'com.android.application' version '8.2.2' apply false
+}
