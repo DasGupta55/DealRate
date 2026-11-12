@@ -4007,7 +4007,6 @@ function ReplyTrackingSection({ userId, accessToken, invalidate }: { userId: str
       {!statusQuery.isPending && status && !status.connected && (
         <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3.5">
           <p className="text-sm font-bold">Reply tracking is off</p>
-          <p className="mt-1 text-sm leading-relaxed text-[var(--dim)]">Turn it on and DealRate will watch your Gmail for brand replies, understand them, and update your deals — you will not have to check Gmail yourself. It asks Google for permission to read your inbox, and the connection is stored encrypted on the server.</p>
           <button type="button" className={btnPrimary + " mt-3"} disabled={enableMut.isPending} onClick={() => enableMut.mutate()}>
             {enableMut.isPending ? "Enabling…" : "Enable reply tracking"}
           </button>
