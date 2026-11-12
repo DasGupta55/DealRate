@@ -646,7 +646,25 @@ export async function sendPitch(
     })
     .eq("id", args.dealId)
     .eq("owner_id", args.userId);
-  dbThrow(updateError, "sendPitch update");
+  if (updateError) {
+    // The reply-tracking columns (pitch_gmail_message_id/thread_id)
+    // come from migration 004. If that migration has not been run yet
+    // the update fails on the missing column — but the email already
+    // went out above, so retry without those columns. The deal still
+    // advances to "pitched" instead of reporting a failure for a
+    // pitch that was actually sent.
+    const { error: retryError } = await db
+      .from("deals")
+      .update({
+        pitch_sent_at: new Date().toISOString(),
+        ...(deal.stage === "prospect" || deal.stage === "pitch_ready"
+          ? { stage: "pitched" }
+          : {}),
+      })
+      .eq("id", args.dealId)
+      .eq("owner_id", args.userId);
+    dbThrow(retryError, "sendPitch update");
+  }
   // Save the pitch as the first message of the deal's conversation,
   // so the conversation view and the reply sync both see the thread.
   await db.from("deal_messages").upsert(
