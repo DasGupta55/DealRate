@@ -72,17 +72,22 @@ export async function getCurrentAccessToken(): Promise<string | null> {
 export async function getGoogleProviderToken(): Promise<string | null> {
   if (!cachedClient) return null;
   try {
-    // Refresh first: the stored Google provider token expires after
-    // ~1 hour, and sending with an expired token is the most common
-    // reason a pitch fails. refreshSession() gives a fresh Google
-    // access token (via the stored Google refresh token) and a fresh
-    // Supabase JWT at the same time. If the refresh fails, fall back
-    // to the stored token — the server will then return a clear
-    // "sign in again" status instead of a generic failure.
+    // Capture the stored token BEFORE refreshing. A refresh can wipe
+    // the Google provider token when there is no Google refresh token
+    // to mint a new one from (plain sign-in never requests offline
+    // access), so refreshing first destroys a valid just-signed-in
+    // token — the user then signs in again and again and the error
+    // never goes away. The stored token is the fallback.
+    const { data: stored } = await cachedClient.auth.getSession();
+    const storedToken = stored.session?.provider_token ?? null;
+    // Refresh: mints a fresh Google token when a Google refresh token
+    // exists (after the Gmail grant), and a fresh Supabase JWT too.
+    // If the refresh fails, fall back to the stored token — the server
+    // will then return a clear "sign in again" status instead of a
+    // generic failure.
     const { data: refreshed } = await cachedClient.auth.refreshSession();
     if (refreshed.session?.provider_token) return refreshed.session.provider_token;
-    const { data } = await cachedClient.auth.getSession();
-    return data.session?.provider_token ?? null;
+    return storedToken;
   } catch {
     return null;
   }

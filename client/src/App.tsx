@@ -3688,8 +3688,9 @@ function DealCard({ deal, data, userId, accessToken, invalidate, index = 0, auto
         // one-tap grant below re-runs Google sign-in with gmail.send
         // and offline access, which restores the token and keeps it
         // fresh afterwards. Without this panel the creator is stuck.
+        // No error toast here: it floats over the grant panel and
+        // hides the "Allow Gmail sending" button.
         setNeedsGmailGrant(true);
-        toast.error(r.message);
         setPitchFallback(true);
       } else {
         setSendMsg(r.message);
@@ -4321,8 +4322,9 @@ function InvoiceCard({ inv, data, userId, accessToken, invalidate, index = 0 }: 
         setRemFallback(true);
       } else if (r.status === "gmail_not_connected" || r.status === "gmail_auth_failed") {
         setMsg(r.message);
+        // No error toast here: it floats over the grant panel and
+        // hides the "Allow Gmail sending" button.
         setNeedsGmailGrant(true);
-        toast.error(r.message);
         setRemFallback(true);
       } else {
         setMsg(r.message);
@@ -4377,8 +4379,9 @@ function InvoiceCard({ inv, data, userId, accessToken, invalidate, index = 0 }: 
         setNeedsGmailGrant(true);
       } else if (r.status === "gmail_not_connected" || r.status === "gmail_auth_failed") {
         setMsg(r.message);
+        // No error toast here: it floats over the grant panel and
+        // hides the "Allow Gmail sending" button.
         setNeedsGmailGrant(true);
-        toast.error(r.message);
       } else {
         setMsg(r.message);
       }
