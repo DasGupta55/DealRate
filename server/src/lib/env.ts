@@ -11,6 +11,7 @@ export interface Env {
   supabaseServiceRoleKey?: string;
   youtubeApiKey?: string;
   tavilyApiKey?: string;
+  exaApiKey?: string;
   groqApiKey?: string;
   geminiApiKey?: string;
   razorpayKeyId?: string;
@@ -40,6 +41,7 @@ export function loadEnv(): Env {
     supabaseServiceRoleKey: clean(e.SUPABASE_SERVICE_ROLE_KEY),
     youtubeApiKey: clean(e.YOUTUBE_API_KEY),
     tavilyApiKey: clean(e.TAVILY_API_KEY),
+    exaApiKey: clean(e.EXA_API_KEY),
     groqApiKey: clean(e.GROQ_API_KEY),
     geminiApiKey: clean(e.GEMINI_API_KEY),
     razorpayKeyId: clean(e.RAZORPAY_KEY_ID),

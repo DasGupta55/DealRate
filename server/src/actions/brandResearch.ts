@@ -22,7 +22,8 @@ import {
   type DealRow,
 } from "../lib/db";
 import { chatAiJson } from "../lib/ai";
-import { searchTavily, type TavilyResult } from "../lib/tavily";
+import { searchWeb } from "../lib/search";
+import { type TavilyResult } from "../lib/tavily";
 import {
   userIdArg,
   type BrandContact,
@@ -160,7 +161,7 @@ export async function researchBrand(
     `${name} influencer marketing campaign collaboration`,
   ];
   const settled = await Promise.allSettled(
-    queries.map((q) => searchTavily(ctx.env.tavilyApiKey ?? "", q)),
+    queries.map((q) => searchWeb(ctx.env, q)),
   );
   const results: TavilyResult[] = settled.flatMap((s) =>
     s.status === "fulfilled" ? s.value : [],
@@ -251,7 +252,7 @@ export async function researchBrand(
         `${name} business email partnerships`,
       ];
       const emailSettled = await Promise.allSettled(
-        emailQueries.map((q) => searchTavily(ctx.env.tavilyApiKey ?? "", q)),
+        emailQueries.map((q) => searchWeb(ctx.env, q)),
       );
       const emailResults: TavilyResult[] = emailSettled.flatMap((s) =>
         s.status === "fulfilled" ? s.value : [],

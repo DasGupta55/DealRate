@@ -11,7 +11,8 @@
 // from that market, has worked with them, or runs campaigns
 // targeting that market.
 
-import { searchTavily, type TavilyResult } from "./tavily";
+import { searchWeb } from "./search";
+import { type TavilyResult } from "./tavily";
 import { chatAiJson } from "./ai";
 import type { Env } from "./env";
 
@@ -397,7 +398,7 @@ export async function discoverSponsorshipBrands(
   const queries = sponsorshipQueries(niche, country);
   const t0 = Date.now();
   const settled = await Promise.allSettled(
-    queries.map((q) => searchTavily(env.tavilyApiKey ?? "", q)),
+    queries.map((q) => searchWeb(env, q)),
   );
   const tavilyMs = Date.now() - t0;
   const perQuery: TavilyResult[][] = settled.map((s) =>
