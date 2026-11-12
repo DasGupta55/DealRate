@@ -862,8 +862,8 @@ function SectionTitle({ children, right }: { children: ReactNode; right?: ReactN
 }
 
 /* ---------------- Page introductions (all six pages) ----------------
-   One art-directed intro per page: the lime handwritten accent
-   (Adelia family) IS the page headline — it writes itself on and
+   One art-directed intro per page: the lime Cormorant Garamond Italic
+   accent IS the page headline — it writes itself on and
    pops forward over a hand-drawn marker underline — followed by the
    page's description and one small floating object. The CSS lives
    in theme.css (.page-intro / .intro-* / .obj-*); reduced motion
@@ -5286,8 +5286,8 @@ function PlanTab({ data, invalidate, signedIn, userId, accessToken, userEmail, u
     <div className="relative space-y-8">
       <div className="ambient-glow" aria-hidden />
       <PageIntro
-        accent="Stop leaving money behind."
-        description="Find brands, pitch, manage deals and organise invoices from one workspace."
+        accent="Turn Your Views Into Brand Deals."
+        description="Everything you need to find sponsors, pitch confidently, manage collaborations and get paid — all in one place."
         value="One well-priced deal could cover your Pro plan."
         visual={<IntroMemberVisual />}
       />
@@ -5369,13 +5369,14 @@ function PlanTab({ data, invalidate, signedIn, userId, accessToken, userEmail, u
               </>
             )}
             <ul className="mt-4 space-y-2.5 text-sm">
-              {["Brand finder — live web search", "Pitches sent from your Gmail", "Deal pipeline, pitch to paid", "Invoices + 30-day reminders"].map((b) => (
+              {["Know exactly what to charge brands — no more guessing your rates.", "Discover brands matched to your YouTube channel and content niche.", "Generate personalized AI sponsorship pitches in one click.", "Track brand replies, negotiations and every collaboration.", "Create personalized professional invoices and send them in one click.", "Download professional invoices instantly as PDF.", "Track overdue payments and automatically send payment reminders to brands.", "Manage your entire sponsorship journey in one place."].map((b) => (
                 <li key={b} className="flex items-start gap-2.5">
                   <span className="mt-0.5 flex-none text-[var(--accent)]"><IconCheck size={16} /></span>
                   <span>{b}</span>
                 </li>
               ))}
             </ul>
+            <p className="mt-5 text-lg font-bold leading-snug">Stop Guessing. <span className="text-[var(--accent)]">Start Getting Paid.</span></p>
             {!pro && (
               <div className="mt-5">
                 {manualMode ? (

@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto:wght@500&family=Saira:wght@600;700;800&family=Space+Grotesk:wght@500;600;700&family=Pinyon+Script&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto:wght@500&family=Saira:wght@600;700;800&family=Space+Grotesk:wght@500;600;700&family=Cormorant+Garamond:ital,wght@1,400;1,500;1,600&display=swap');
 @import "tailwindcss";
 @import "tailwindcss-safe-area";
 
@@ -21,11 +21,11 @@
   src: url("./assets/fonts/saira-800-latin.woff2") format("woff2");
 }
 @font-face {
-  font-family: "Pinyon Script";
-  font-style: normal;
-  font-weight: 400;
+  font-family: "Cormorant Garamond";
+  font-style: italic;
+  font-weight: 400 600;
   font-display: swap;
-  src: url("./assets/fonts/pinyon-script-latin.woff2") format("woff2");
+  src: url("./assets/fonts/cormorant-garamond-italic-latin.woff2") format("woff2");
 }
 
 @theme {
@@ -51,12 +51,10 @@
   --font-display: "Space Grotesk", "Inter", ui-sans-serif, system-ui, sans-serif;
   /* Primary page headlines: Saira (SIL OFL, commercial use OK). */
   --font-headline: "Saira", "Inter", ui-sans-serif, system-ui, sans-serif;
-  /* Handwritten accents: the family name is "Adelia" so a licensed
-     Adelia file dropped in later wins automatically. Adelia itself is
-     personal-use only (commercial licence sold separately), so no
-     Adelia file is embedded; the rendered stand-in is Pinyon Script
-     (SIL OFL), the elegant signature hand already shipped with the app. */
-  --font-hand: "Adelia", "Pinyon Script", "Snell Roundhand", "Segoe Script", cursive;
+  /* Headline accents: Cormorant Garamond Italic (SIL OFL) — the
+     elegant, premium serif italic used for the signature headline
+     accent on every page. Rendered in italic via .intro-accent. */
+  --font-hand: "Cormorant Garamond", Georgia, "Times New Roman", serif;
 }
 
 :root {
@@ -95,7 +93,7 @@ body {
 
 /* ---- Five-page intro system: signature accent as the headline ----
    One visual language on every page (Price, Brands, Deals, Invoices,
-   Plan): the handwritten accent (Adelia family, lime) is the
+   Plan): the Cormorant Garamond Italic accent (lime) is the
    page's main headline — it writes itself on with a clip reveal and
    pops forward off the surface on layered soft shadows, a hand-drawn
    marker underline draws in behind it, the description rises in, and
@@ -140,6 +138,7 @@ body {
 .intro-accent {
   display: inline-block;
   font-family: var(--font-hand);
+  font-style: italic;
   font-weight: 400;
   font-size: clamp(2.35rem, 11vw, 3.9rem);
   line-height: 1.3;
