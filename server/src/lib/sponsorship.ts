@@ -187,24 +187,14 @@ export function buildDistillPrompt(
   results: TavilyResult[],
 ): string {
   return [
-    `You are finding brands that actually PAY creators in the ${niche} niche for the ${country} creator/audience market.`,
+    `Find brands that actually PAY creators in the ${niche} niche for the ${country} creator/audience market. The market is the creator's audience, NOT the brand's HQ — a foreign company that sponsors ${country} creators IS valid.`,
     ``,
-    `The market is the creator's audience, NOT the brand's headquarters. A US, British, Korean, Japanese or European company that sponsors ${country} creators, or runs campaigns targeting ${country} audiences, IS a valid result for market ${country}. Do not restrict results to brands headquartered in ${country}.`,
-    ``,
-    `RULES — follow them strictly:`,
-    `1. Recommend ONLY real companies that sell a product or service in this niche. A brand is a company, not a website.`,
-    `2. NEVER recommend as a brand: news articles, blog posts, publications (Business Insider, Forbes, TechCrunch, YourStory, newspapers), listicles ("Top 10…", "Best…"), influencer marketing agencies, influencer management companies, marketing consultants, general marketing platforms, or creator marketplaces. Those go in the separate "agencies" list, not in "brands". A news article is only a source of evidence about a real company — the article itself is never the brand.`,
-    `3. NEVER confuse free product gifting, barter, or affiliate commissions with a paid sponsorship. If the only evidence is gifting or affiliate, classify it as "affiliate_only" or "potential", never "verified_paid".`,
-    `4. Classify each brand honestly, using only the evidence in the results:`,
-    `   - "verified_paid": credible evidence of previous PAID collaborations with creators in the ${country} market (a sponsored video, a paid partnership post, a disclosed paid campaign, a creator saying they were paid).`,
-    `   - "active_program": the company has an identifiable ACTIVE paid creator partnership program that accepts creators from ${country}. A program page alone is not enough — it must say it pays creators.`,
-    `   - "international_paid": an international company (headquartered outside ${country}) with credible evidence of paid collaborations with creators targeting the ${country} market.`,
-    `   - "potential": the company has a relevant business contact or partnership channel, but paid sponsorship activity or creator eligibility has NOT been confirmed. Use this whenever the evidence is thin.`,
-    `   - "affiliate_only": the company offers affiliate commissions but no confirmed fixed-fee sponsorship.`,
-    `5. Do NOT claim a brand currently pays ${country} creators unless the results support it. A previous paid campaign does not guarantee it currently accepts new creators.`,
-    `6. For each brand, extract: official website, headquarters country, industry, the evidence sentence, the example creator or campaign name when named, the platform (YouTube/Instagram/other), the campaign or evidence date when stated, a direct link to the evidence (sponsored video, paid post, campaign page), and the official creator/partnership page URL when one exists. Leave a field null when the results do not state it — never guess.`,
-    `7. Rank the brands by evidence strength: verified paid collaborations first, then active programs, then international paid partnerships, then potential, then affiliate-only. Within a category, prefer recent and repeated collaborations. Do NOT rank a brand highly just because it is famous or sells products in ${country}.`,
-    `8. Return at most 8 brands and at most 4 agencies. Quality matters more than quantity — return fewer rather than padding with weak matches.`,
+    `RULES:`,
+    `1. Only real companies that sell in this niche. Never list articles, publications, listicles, agencies or marketplaces as brands — those go in "agencies".`,
+    `2. Gifting, barter or affiliate is NOT paid sponsorship — classify as affiliate_only or potential, never verified_paid.`,
+    `3. Classify honestly from the evidence only: verified_paid (proof of paid work with ${country} creators), active_program (an active paid program open to ${country} creators), international_paid (foreign company with paid work targeting ${country}), potential (contact exists but paid work unconfirmed — use this when unsure), affiliate_only (affiliate only, no fixed fee).`,
+    `4. For each brand give: website, HQ country, industry, one evidence sentence, example creator/campaign if named, platform, date if stated, evidence link, partnership page link. Leave a field null when the results don't state it — never guess.`,
+    `5. Rank by evidence strength, verified first. Return at most 6 brands and 3 agencies. Fewer is fine — don't pad with weak matches.`,
     ``,
     `Return JSON in exactly this shape:`,
     `{"brands": [{"name": "...", "website": "...", "hqCountry": "...", "industry": "...", "classification": "verified_paid|active_program|international_paid|potential|affiliate_only", "evidence": "...", "exampleCreator": "...", "platform": "...", "evidenceDate": "...", "evidenceUrl": "...", "partnershipUrl": "...", "why": "...", "sourceUrl": "..."}], "agencies": [{"name": "...", "website": "...", "why": "...", "sourceUrl": "..."}]}`,
@@ -255,7 +245,7 @@ export async function distillSponsorshipResults(
   country: string,
   results: TavilyResult[],
 ): Promise<SponsorshipDiscovery> {
-  const top = results.slice(0, 24);
+  const top = results.slice(0, 12);
   // The AI step is the one that can fail transiently (a bad reply, a
   // parse error). Retry it once before giving up — a valid empty
   // result (no real brands found) is not an error and is not retried.
@@ -283,18 +273,20 @@ export async function distillSponsorshipResults(
           url?: string | null;
         }[];
       }>(env, DISTILL_SYSTEM, buildDistillPrompt(niche, country, top), {
-        // The distillation returns up to 8 brands + 4 agencies of
-        // JSON. gpt-oss-120b spends several hundred tokens reasoning
-        // first, so the default 1200-token budget truncates the
-        // reply and the parse fails. 3500 leaves room for the full
-        // answer. Other AI calls keep the default.
+        // The distillation returns up to 6 brands + 3 agencies of
+        // JSON. Keep the prompt and the answer short on purpose: a
+        // long detailed prompt plus a 3500-token reply made the
+        // search run ~25-30s and time out. 12 results in, 6 brands
+        // out, 2500 tokens is enough room for the full answer and
+        // keeps the whole search to a few seconds. Other AI calls
+        // keep their own budgets.
         // Use the fast 20b model here: the 120b model's long
-        // reasoning + 3500-token reply is slow enough that the whole
+        // reasoning + long reply is slow enough that the whole
         // search exceeds Netlify's function time limit and fails
         // with a 504. The 20b model returns the same JSON shape far
         // quicker, and the server-side backstops (isNonBrand,
         // classification downgrade) still apply.
-        maxTokens: 3500,
+        maxTokens: 2500,
         model: FAST_MODEL,
       });
     } catch {
