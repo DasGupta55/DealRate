@@ -1782,17 +1782,18 @@ export function App() {
       {/* Desktop sidebar — wide screens only. Same five sections as the
           mobile bottom nav, reusing the same tabs state. Hidden on
           phones, where the bottom nav stays. */}
-      <nav aria-label="Main sections" className="fixed inset-y-0 left-0 z-40 hidden w-60 flex-col border-r border-[var(--border)] bg-[var(--surface)] px-3 py-5 lg:flex">
+      <nav aria-label="Main sections" className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-[var(--border)] bg-[var(--surface)] px-3 py-5 lg:flex">
         <button
           type="button"
           onClick={() => setTab("price")}
-          className="btn-press mb-6 flex items-center gap-2 px-3 text-left"
+          className="btn-press mb-7 flex items-center gap-2 px-3 text-left"
           aria-label="DealRate — go to Price"
         >
           <span className="text-xl font-extrabold tracking-tight text-[var(--text)]">
             Deal<span className="text-[var(--accent)]">Rate</span>
           </span>
         </button>
+        <p className="mb-2 px-3 text-[11px] font-bold uppercase tracking-[0.14em] text-[var(--dim)]">Main</p>
         {tabs.map((t) => {
           const TabIcon = t.icon;
           const active = tab === t.key;
@@ -1821,8 +1822,27 @@ export function App() {
             </button>
           );
         })}
+        <div className="flex-1" />
+        {/* Plan status — same Pro state as the header pill. */}
+        <div className={`rounded-2xl border p-3.5 ${isPro ? "border-[var(--violet)]/50 bg-[var(--violet)]/12" : "border-[var(--border)] bg-[var(--surface-alt)]"}`}>
+          <p className={`text-xs font-extrabold uppercase tracking-[0.12em] ${isPro ? "text-[var(--violet)]" : "text-[var(--dim)]"}`}>
+            {isPro ? "Pro active" : "Free plan"}
+          </p>
+          <p className="mt-1 text-xs leading-relaxed text-[var(--dim)]">
+            {isPro
+              ? (menuExpiryLabel ? `Renews through ${menuExpiryLabel}` : "All Pro features unlocked.")
+              : "Unlock brand discovery, deals and invoices."}
+          </p>
+          <button
+            type="button"
+            onClick={() => setTab("plan")}
+            className={`btn-press mt-3 w-full rounded-xl py-2 text-xs font-bold ${isPro ? "bg-[var(--surface)] text-[var(--text)]" : "bg-[var(--accent)] text-black"}`}
+          >
+            {isPro ? "Manage plan" : "Upgrade to Pro"}
+          </button>
+        </div>
       </nav>
-      <main className="mx-auto w-full max-w-3xl px-4 pb-28 lg:ml-60 lg:pb-10">
+      <main className="mx-auto w-full max-w-3xl px-4 pb-28 lg:ml-64 lg:max-w-5xl lg:px-8 lg:pb-10">
         <motion.header
           className="pt-5 pb-4"
           initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 14 }}
