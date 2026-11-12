@@ -3662,7 +3662,7 @@ function DealCard({ deal, data, userId, accessToken, invalidate, index = 0, auto
       if (!token) {
         return {
           status: "gmail_not_connected",
-          message: "Sign in with Google first, then tap Send again and allow Gmail sending — or download the draft below.",
+          message: "Your Google connection expired. Tap “Allow Gmail sending” below to reconnect, then tap Send again.",
           fromEmail: null,
           draft: null,
         };
@@ -3684,6 +3684,11 @@ function DealCard({ deal, data, userId, accessToken, invalidate, index = 0, auto
         setPitchFallback(true);
       } else if (r.status === "gmail_not_connected" || r.status === "gmail_auth_failed") {
         setSendMsg(r.message);
+        // The Google token is gone (expired, no refresh token) — the
+        // one-tap grant below re-runs Google sign-in with gmail.send
+        // and offline access, which restores the token and keeps it
+        // fresh afterwards. Without this panel the creator is stuck.
+        setNeedsGmailGrant(true);
         toast.error(r.message);
         setPitchFallback(true);
       } else {
@@ -4294,7 +4299,7 @@ function InvoiceCard({ inv, data, userId, accessToken, invalidate, index = 0 }: 
       if (!token) {
         return {
           status: "gmail_not_connected",
-          message: "Sign in with Google first, then tap Send again and allow Gmail sending — or download the reminder draft below.",
+          message: "Your Google connection expired. Tap “Allow Gmail sending” below to reconnect, then tap Send again.",
           fromEmail: null,
           draft: null,
         };
@@ -4316,6 +4321,7 @@ function InvoiceCard({ inv, data, userId, accessToken, invalidate, index = 0 }: 
         setRemFallback(true);
       } else if (r.status === "gmail_not_connected" || r.status === "gmail_auth_failed") {
         setMsg(r.message);
+        setNeedsGmailGrant(true);
         toast.error(r.message);
         setRemFallback(true);
       } else {
@@ -4350,7 +4356,7 @@ function InvoiceCard({ inv, data, userId, accessToken, invalidate, index = 0 }: 
       if (!token) {
         return {
           status: "gmail_not_connected",
-          message: "Sign in with Google first, then tap Send again and allow Gmail sending — or download the invoice below.",
+          message: "Your Google connection expired. Tap “Allow Gmail sending” below to reconnect, then tap Send again.",
           fromEmail: null,
           draft: null,
         };
@@ -4371,6 +4377,7 @@ function InvoiceCard({ inv, data, userId, accessToken, invalidate, index = 0 }: 
         setNeedsGmailGrant(true);
       } else if (r.status === "gmail_not_connected" || r.status === "gmail_auth_failed") {
         setMsg(r.message);
+        setNeedsGmailGrant(true);
         toast.error(r.message);
       } else {
         setMsg(r.message);
