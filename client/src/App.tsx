@@ -2724,6 +2724,42 @@ function sameNicheMarket(
   );
 }
 
+function sameMarket(
+  b: { creatorMarket?: string | null },
+  country: string,
+): boolean {
+  return (b.creatorMarket ?? "").trim().toLowerCase() === country.trim().toLowerCase();
+}
+
+/* Group a brand list by niche, with the selected niche first and the
+   other groups after it (most recently added first). The list the user
+   just searched for is never buried under older results from other
+   niches — it is always the top group. */
+function groupByNiche<T extends { niche?: string | null; id: number }>(
+  list: T[],
+  selectedNiche: string,
+): { niche: string; brands: T[] }[] {
+  const byNiche = new Map<string, T[]>();
+  for (const b of list) {
+    const key = (b.niche ?? "Other").trim() || "Other";
+    const arr = byNiche.get(key);
+    if (arr) arr.push(b);
+    else byNiche.set(key, [b]);
+  }
+  const norm = (s: string) => s.trim().toLowerCase();
+  const groups = [...byNiche.entries()].map(([niche, brands]) => ({ niche, brands }));
+  groups.sort((a, b) => {
+    const aSel = norm(a.niche) === norm(selectedNiche);
+    const bSel = norm(b.niche) === norm(selectedNiche);
+    if (aSel !== bSel) return aSel ? -1 : 1;
+    // Most recently added group first (highest brand id).
+    const aMax = Math.max(...a.brands.map((x) => x.id));
+    const bMax = Math.max(...b.brands.map((x) => x.id));
+    return bMax - aMax;
+  });
+  return groups;
+}
+
 function BrandsTab({ data, userId, accessToken, invalidate, goDeals, onDealAdded }: { data: Dash; userId: string; accessToken?: string; invalidate: () => void; goDeals: () => void; onDealAdded?: (dealId: number) => void }) {
   const reduce = useReducedMotion();
   const [niche, setNiche] = useState("Tech");
@@ -2779,8 +2815,20 @@ function BrandsTab({ data, userId, accessToken, invalidate, goDeals, onDealAdded
   const dealFor = (brandName: string) =>
     dealByBrand.get(brandName.trim().toLowerCase()) ?? null;
 
-  const suggestions = data.brands.filter((b) => b.isSuggestion && !b.isAgency && sameNicheMarket(b, niche, country));
-  const agencies = data.brands.filter((b) => b.isSuggestion && b.isAgency && sameNicheMarket(b, niche, country));
+  // Suggestions and agencies are grouped by niche, not hidden by it:
+  // the niche the user picked (and just searched) is the top group,
+  // and every other niche's saved brands sit in their own group below.
+  const suggestionGroups = groupByNiche(
+    data.brands.filter((b) => b.isSuggestion && !b.isAgency && sameMarket(b, country)),
+    niche,
+  );
+  const agencyGroups = groupByNiche(
+    data.brands.filter((b) => b.isSuggestion && b.isAgency && sameMarket(b, country)),
+    niche,
+  );
+  const selectedSuggestionGroup = suggestionGroups.find(
+    (g) => g.niche.trim().toLowerCase() === niche.trim().toLowerCase(),
+  );
   const mine = data.brands.filter((b) => !b.isSuggestion);
 
   return (
@@ -2833,12 +2881,17 @@ function BrandsTab({ data, userId, accessToken, invalidate, goDeals, onDealAdded
         {msg && <p className="mt-2 text-sm text-[var(--dim)]" role="status">{msg}</p>}
       </section>
 
-      {suggestions.length > 0 ? (
-        <section aria-label="Brand suggestions">
-          <SectionTitle>Suggestions to review</SectionTitle>
-          <p className="mt-1 text-sm text-[var(--dim)]">Brands are ranked by the strength of their paid sponsorship evidence. A listing is not a promise the brand will accept your proposal.</p>
-          <ul className="mt-3 space-y-3">
-            {suggestions.map((b, i) => {
+      <section aria-label="Brand suggestions">
+        <SectionTitle>Suggestions to review</SectionTitle>
+        <p className="mt-1 text-sm text-[var(--dim)]">Brands are ranked by the strength of their paid sponsorship evidence. A listing is not a promise the brand will accept your proposal.</p>
+        {!selectedSuggestionGroup && (
+          <p className="mt-3 text-sm text-[var(--dim)]">No brands saved for {niche} + {country} yet. Tap "Search for brands" above to discover some.</p>
+        )}
+        {suggestionGroups.map((group) => (
+          <div key={group.niche} className="mt-5">
+            <h3 className="text-base font-bold">{group.niche} <span className="text-sm font-medium text-[var(--dim)]">({group.brands.length})</span></h3>
+            <ul className="mt-3 space-y-3">
+              {group.brands.map((b, i) => {
               const meta = classificationMeta(b.classification);
               const ev = b.evidence;
               return (
@@ -2902,22 +2955,21 @@ function BrandsTab({ data, userId, accessToken, invalidate, goDeals, onDealAdded
                   </div>
                 </motion.li>
               );
-            })}
-          </ul>
-        </section>
-      ) : (
-        <section aria-label="Brand suggestions">
-          <SectionTitle>Suggestions to review</SectionTitle>
-          <p className="mt-1 text-sm text-[var(--dim)]">No brands saved for {niche} + {country} yet. Tap "Search for brands" above to discover some.</p>
-        </section>
-      )}
+              })}
+            </ul>
+          </div>
+        ))}
+      </section>
 
-      {agencies.length > 0 && (
+      {agencyGroups.length > 0 && (
         <section aria-label="Creator agencies and marketplaces">
           <SectionTitle>Creator Agencies &amp; Marketplaces</SectionTitle>
           <p className="mt-1 text-sm text-[var(--dim)]">These are agencies and platforms that connect creators with brands — not direct brand sponsorships. They are listed separately on purpose.</p>
-          <ul className="mt-3 space-y-3">
-            {agencies.map((b, i) => (
+          {agencyGroups.map((group) => (
+            <div key={group.niche} className="mt-5">
+              <h3 className="text-base font-bold">{group.niche} <span className="text-sm font-medium text-[var(--dim)]">({group.brands.length})</span></h3>
+              <ul className="mt-3 space-y-3">
+                {group.brands.map((b, i) => (
               <motion.li key={b.id} {...itemAnim(i, reduce)} className="card p-4">
                 <p className="font-display text-lg font-bold [overflow-wrap:anywhere]">{b.name}</p>
                 {b.notes && <p className="mt-0.5 line-clamp-3 text-sm text-[var(--dim)]">{b.notes}</p>}
@@ -2933,8 +2985,10 @@ function BrandsTab({ data, userId, accessToken, invalidate, goDeals, onDealAdded
                   <button type="button" className={btnGhost} onClick={() => api.deleteBrand({ userId, accessToken, id: b.id }).then(invalidate)}>Dismiss</button>
                 </div>
               </motion.li>
-            ))}
-          </ul>
+                ))}
+              </ul>
+            </div>
+          ))}
         </section>
       )}
 
@@ -4480,7 +4534,7 @@ function InvoicesTab({ data, userId, accessToken, invalidate }: { data: Dash; us
           </div>
           <div className="col-span-2">
             <label className={labelCls} htmlFor="inv-desc">Description</label>
-            <input id="inv-desc" className={inputCls} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Dedicated video — product launch" />
+            <input id="inv-desc" className={inputCls} value={desc} onChange={(e) => setDesc(e.target.value)} placeholder="Paste the video link or describe the work — e.g. Dedicated video, product launch" />
           </div>
           <button type="submit" className={btnPrimary + " col-span-2"} disabled={createMut.isPending}>Create invoice</button>
         </form>
@@ -5015,7 +5069,7 @@ function PlanTab({ data, invalidate, signedIn, userId, accessToken, userEmail, u
      on the Owner screen, as a fallback. */
   const manualMode = data.paymentMode !== "automatic";
   const reduce = useReducedMotion();
-  const [billing, setBilling] = useState<"monthly" | "annual">("annual");
+  const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
   const monthlyOff = percentOff(PRICING.monthly.price, PRICING.monthly.was);
   const annualOff = percentOff(PRICING.annual.price, PRICING.annual.was);
   const annualPerMonth = Math.round(PRICING.annual.price / 12);
