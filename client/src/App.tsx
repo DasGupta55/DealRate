@@ -2438,8 +2438,9 @@ function PriceTab(props: {
         </>)}
       </section>
 
-      {/* Calculator */}
-      <section aria-label="Price calculator">
+      {/* Calculator + estimated range side by side on desktop. */}
+      <div className="space-y-8 lg:grid lg:grid-cols-5 lg:items-start lg:gap-6 lg:space-y-0">
+      <section aria-label="Price calculator" className="lg:col-span-3">
         <SectionTitle>Calculator</SectionTitle>
 
         <motion.div
@@ -2579,7 +2580,7 @@ function PriceTab(props: {
       {/* Estimated range — the calculator's result, shown below it.
           All values start at 0 and only fill in once the creator
           fetches a channel or types numbers into the calculator. */}
-      <section aria-label="Your estimated range">
+      <section aria-label="Your estimated range" className="lg:col-span-2">
         <motion.div {...itemAnim(1, reduce)} className="card relative overflow-visible p-6">
           {showConfetti && !reduce && <ConfettiBurst />}
           <p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--dim)]">Your estimated range · {deliv.label}</p>
@@ -2627,6 +2628,7 @@ function PriceTab(props: {
           </motion.div>
         </motion.div>
       </section>
+      </div>
 
       {/* Saved rate cards */}
       {data.calculations.length > 0 && (
@@ -2953,7 +2955,7 @@ function BrandsTab({ data, userId, accessToken, invalidate, goDeals, onDealAdded
         {suggestionGroups.map((group) => (
           <div key={group.niche} className="mt-5">
             <h3 className="text-base font-bold">{group.niche} <span className="text-sm font-medium text-[var(--dim)]">({group.brands.length})</span></h3>
-            <ul className="mt-3 space-y-3">
+            <ul className="mt-3 grid gap-3 lg:grid-cols-2">
               {group.brands.map((b, i) => {
               const meta = classificationMeta(b.classification);
               const ev = b.evidence;
@@ -3031,7 +3033,7 @@ function BrandsTab({ data, userId, accessToken, invalidate, goDeals, onDealAdded
           {agencyGroups.map((group) => (
             <div key={group.niche} className="mt-5">
               <h3 className="text-base font-bold">{group.niche} <span className="text-sm font-medium text-[var(--dim)]">({group.brands.length})</span></h3>
-              <ul className="mt-3 space-y-3">
+              <ul className="mt-3 grid gap-3 lg:grid-cols-2">
                 {group.brands.map((b, i) => (
               <motion.li key={b.id} {...itemAnim(i, reduce)} className="card p-4">
                 <p className="font-display text-lg font-bold [overflow-wrap:anywhere]">{b.name}</p>
@@ -3078,7 +3080,7 @@ function BrandsTab({ data, userId, accessToken, invalidate, goDeals, onDealAdded
         </form>
 
         {mine.length === 0 && <p className="mt-3 text-sm text-[var(--dim)]">No brands yet. Search above or add one you already have in mind.</p>}
-        <ul className="mt-3 space-y-3">
+        <ul className="mt-3 grid gap-3 lg:grid-cols-2">
           {mine.map((b, i) => (
             <motion.li key={b.id} {...itemAnim(i, reduce)} className="flex flex-wrap items-center justify-between gap-3 card p-4">
               <div className="min-w-0 flex-1 basis-48">
@@ -4122,7 +4124,7 @@ function DealsTab({ data, userId, accessToken, invalidate, autoResearchDealId, o
         </form>
       </section>
       {data.deals.length === 0 && <p className="text-sm text-[var(--dim)]">No deals yet. Start one from the Brands tab, or add a brand above.</p>}
-      <ul className="space-y-4">
+      <ul className="grid gap-4 lg:grid-cols-2 lg:items-start">
         {data.deals.map((d, i) => <DealCard key={d.id} deal={d} data={data} userId={userId} accessToken={accessToken} invalidate={invalidate} index={i} autoResearch={autoResearchDealId != null && d.id === autoResearchDealId} onAutoResearchDone={onAutoResearchDone} />)}
       </ul>
     </div>
@@ -4613,7 +4615,7 @@ function InvoicesTab({ data, userId, accessToken, invalidate }: { data: Dash; us
       </section>
 
       {data.invoices.length === 0 && <p className="text-sm text-[var(--dim)]">No invoices yet. Create one above, or from an approved deal.</p>}
-      <ul className="space-y-4">
+      <ul className="grid gap-4 lg:grid-cols-2 lg:items-start">
         {data.invoices.map((inv, i) => <InvoiceCard key={inv.id} inv={inv} data={data} userId={userId} accessToken={accessToken} invalidate={invalidate} index={i} />)}
       </ul>
 
