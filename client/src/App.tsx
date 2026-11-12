@@ -2718,6 +2718,7 @@ function BrandsTab({ data, userId, accessToken, invalidate, goDeals, onDealAdded
 
   const discoverMut = useMutation({
     mutationFn: () => api.discoverBrands({ userId, accessToken, niche, country }),
+    onMutate: () => { setMsg(""); },
     onSuccess: (r) => {
       setMsg(r.message);
       invalidate();

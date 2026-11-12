@@ -169,11 +169,15 @@ export async function enrichBrandEmails(
     .eq("is_suggestion", true)
     .eq("niche", niche)
     .eq("creator_market", country)
-    .is("contact_email", null)
     .order("created_at", { ascending: false })
     .limit(8);
   dbThrow(error, "enrichBrandEmails list");
-  const rows = (data ?? []) as BrandRow[];
+  // Re-process brands with no email, and brands whose stored email is
+  // a unicode-escape artefact (e.g. "u003esupport@anker.com") left by
+  // the extractor before it stripped those.
+  const rows = ((data ?? []) as BrandRow[]).filter(
+    (b) => !b.contact_email || /u003[ce]/i.test(b.contact_email),
+  );
   let enriched = 0;
   await Promise.allSettled(
     rows.map(async (b) => {

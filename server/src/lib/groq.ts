@@ -8,6 +8,11 @@
 // 403 error 1010. The visible reply is in choices[0].message.content.
 
 const MODEL = "openai/gpt-oss-120b";
+/** Smaller, much faster model for long structured extraction (brand
+ *  distillation). The 120b model reasons at length and its 3500-token
+ *  distillation reply is slow enough to hit Netlify's function time
+ *  limit; the 20b model returns the same JSON shape far quicker. */
+export const FAST_MODEL = "openai/gpt-oss-20b";
 const MAX_TOKENS = 1200;
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -16,7 +21,7 @@ export async function chatGroq(
   apiKey: string,
   system: string,
   prompt: string,
-  opts?: { json?: boolean; maxTokens?: number },
+  opts?: { json?: boolean; maxTokens?: number; model?: string },
 ): Promise<string> {
   if (!apiKey) {
     throw new Error("AI generation isn't configured yet.");
@@ -32,7 +37,7 @@ export async function chatGroq(
         "User-Agent": USER_AGENT,
       },
       body: JSON.stringify({
-        model: MODEL,
+        model: opts?.model ?? MODEL,
         messages: [
           { role: "system", content: system },
           { role: "user", content: prompt },
@@ -66,9 +71,9 @@ export async function chatGroqJson<T>(
   apiKey: string,
   system: string,
   prompt: string,
-  opts?: { maxTokens?: number },
+  opts?: { maxTokens?: number; model?: string },
 ): Promise<T> {
-  const text = await chatGroq(apiKey, system, prompt, { json: true, maxTokens: opts?.maxTokens });
+  const text = await chatGroq(apiKey, system, prompt, { json: true, maxTokens: opts?.maxTokens, model: opts?.model });
   const cleaned = text
     .trim()
     .replace(/^```(?:json)?\s*/i, "")

@@ -13,6 +13,7 @@
 
 import { searchTavily, type TavilyResult } from "./tavily";
 import { chatAiJson } from "./ai";
+import { FAST_MODEL } from "./groq";
 import type { Env } from "./env";
 
 export const SPONSORSHIP_CLASSIFICATIONS = [
@@ -287,7 +288,14 @@ export async function distillSponsorshipResults(
         // first, so the default 1200-token budget truncates the
         // reply and the parse fails. 3500 leaves room for the full
         // answer. Other AI calls keep the default.
+        // Use the fast 20b model here: the 120b model's long
+        // reasoning + 3500-token reply is slow enough that the whole
+        // search exceeds Netlify's function time limit and fails
+        // with a 504. The 20b model returns the same JSON shape far
+        // quicker, and the server-side backstops (isNonBrand,
+        // classification downgrade) still apply.
         maxTokens: 3500,
+        model: FAST_MODEL,
       });
     } catch {
       distilled = null;

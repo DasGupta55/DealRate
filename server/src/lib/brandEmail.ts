@@ -195,6 +195,13 @@ function extractPhones(text: string): string[] {
 
 function cleanEmail(raw: string): string | null {
   let e = raw.trim().toLowerCase();
+  // Strip a leading unicode-escape artefact (">", "<") left behind
+  // when an address was pulled out of JSON/HTML-escaped text, e.g.
+  // "\u003esupport@anker.com" losing its backslash and arriving as
+  // "u003esupport@anker.com". Without this the artefact passes the
+  // email check (its characters are all valid in a local part) and a
+  // broken address gets stored and mailed to.
+  e = e.replace(/^u003[ce]/, "");
   // Strip trailing punctuation the regex may have caught.
   e = e.replace(/[.,;:!?)\]}>"']+$/, "");
   if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(e)) return null;
