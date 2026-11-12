@@ -610,3 +610,14 @@ input, select, textarea {
     -webkit-backdrop-filter: none;
   }
 }
+
+/* Netlify's free tier injects a "Powered by Netlify" badge — an iframe
+   (#nl-badge-frame) fixed at the bottom-right with a near-maximum
+   z-index. It sits on top of the bottom navigation (covering Deals /
+   Invoices / Plan) and reads as an ad on a professional product.
+   Netlify only offers a "Hide this badge" button on paid plans, so
+   hide the injected frame here. If Netlify ever changes the frame id,
+   this rule stops matching and the badge reappears. */
+iframe#nl-badge-frame {
+  display: none !important;
+}
