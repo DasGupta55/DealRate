@@ -77,7 +77,10 @@ export async function researchBrand(
     const cachedContacts = (parsed as { contacts?: BrandContact[] }).contacts ?? [];
     const cachedPhones = (parsed as { phones?: { phone: string; sourceUrl: string | null }[] }).phones ?? [];
     const cachedContactPage = (parsed as { contactPageUrl?: string | null }).contactPageUrl ?? null;
-    if (cachedContacts.length > 0 || cachedPhones.length > 0 || cachedContactPage) {
+    // A guessed contact-page URL alone is not discovered contact data:
+    // research that found no email and no phone falls through to a
+    // fresh run, so the wider email search gets a chance to find one.
+    if (cachedContacts.length > 0 || cachedPhones.length > 0) {
       // Fill the deal's email from the cached best contact when the
       // creator has not set one (or it was auto-filled before).
       const currentEmail = (deal.brand_email ?? "").trim();
