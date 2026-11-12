@@ -13,7 +13,6 @@
 
 import { searchTavily, type TavilyResult } from "./tavily";
 import { chatAiJson } from "./ai";
-import { FAST_MODEL } from "./groq";
 import type { Env } from "./env";
 
 export const SPONSORSHIP_CLASSIFICATIONS = [
@@ -190,7 +189,7 @@ export function buildDistillPrompt(
     `Find brands that actually PAY creators in the ${niche} niche for the ${country} creator/audience market. The market is the creator's audience, NOT the brand's HQ — a foreign company that sponsors ${country} creators IS valid.`,
     ``,
     `RULES:`,
-    `1. Only real companies that sell in this niche. Never list articles, publications, listicles, agencies or marketplaces as brands — those go in "agencies".`,
+    `1. Only real companies that sell a product or service in this niche. A brand SELLS something (food, clothes, phones). An agency's business is connecting brands with creators — if its main work is matchmaking, it is an agency, not a brand. Never list articles, publications, listicles, agencies or marketplaces as brands — those go in "agencies".`,
     `2. Gifting, barter or affiliate is NOT paid sponsorship — classify as affiliate_only or potential, never verified_paid.`,
     `3. Classify honestly from the evidence only: verified_paid (proof of paid work with ${country} creators), active_program (an active paid program open to ${country} creators), international_paid (foreign company with paid work targeting ${country}), potential (contact exists but paid work unconfirmed — use this when unsure), affiliate_only (affiliate only, no fixed fee).`,
     `4. For each brand give: website, HQ country, industry, one evidence sentence, example creator/campaign if named, platform, date if stated, evidence link, partnership page link. Leave a field null when the results don't state it — never guess.`,
@@ -280,14 +279,12 @@ export async function distillSponsorshipResults(
         // out, 2500 tokens is enough room for the full answer and
         // keeps the whole search to a few seconds. Other AI calls
         // keep their own budgets.
-        // Use the fast 20b model here: the 120b model's long
-        // reasoning + long reply is slow enough that the whole
-        // search exceeds Netlify's function time limit and fails
-        // with a 504. The 20b model returns the same JSON shape far
-        // quicker, and the server-side backstops (isNonBrand,
-        // classification downgrade) still apply.
+        // Uses the default 120b model (no model override): with the
+        // short prompt the 120b answers in ~4s, and it is more
+        // reliable than the fast 20b at telling real brands apart
+        // from agencies on messy real search results — the 20b
+        // returned 0 brands and only agencies for Food and Finance.
         maxTokens: 2500,
-        model: FAST_MODEL,
       });
     } catch {
       distilled = null;
