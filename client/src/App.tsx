@@ -2707,6 +2707,23 @@ function classificationMeta(classification: string | null): { label: string; cls
   return CLASSIFICATION_META[classification ?? ""] ?? CLASSIFICATION_META.potential;
 }
 
+/** A saved suggestion belongs to the niche + creator market it was
+ *  discovered for. The suggestions list is filtered to the niche and
+ *  market the user currently has selected, so picking a different
+ *  niche shows that niche's brands — not the same list every time.
+ *  Without this, Business and Gaming (or any two niches) show
+ *  identical cards and the finder looks broken. */
+function sameNicheMarket(
+  b: { niche?: string | null; creatorMarket?: string | null },
+  niche: string,
+  country: string,
+): boolean {
+  return (
+    (b.niche ?? "").trim().toLowerCase() === niche.trim().toLowerCase() &&
+    (b.creatorMarket ?? "").trim().toLowerCase() === country.trim().toLowerCase()
+  );
+}
+
 function BrandsTab({ data, userId, accessToken, invalidate, goDeals, onDealAdded }: { data: Dash; userId: string; accessToken?: string; invalidate: () => void; goDeals: () => void; onDealAdded?: (dealId: number) => void }) {
   const reduce = useReducedMotion();
   const [niche, setNiche] = useState("Tech");
@@ -2762,8 +2779,8 @@ function BrandsTab({ data, userId, accessToken, invalidate, goDeals, onDealAdded
   const dealFor = (brandName: string) =>
     dealByBrand.get(brandName.trim().toLowerCase()) ?? null;
 
-  const suggestions = data.brands.filter((b) => b.isSuggestion && !b.isAgency);
-  const agencies = data.brands.filter((b) => b.isSuggestion && b.isAgency);
+  const suggestions = data.brands.filter((b) => b.isSuggestion && !b.isAgency && sameNicheMarket(b, niche, country));
+  const agencies = data.brands.filter((b) => b.isSuggestion && b.isAgency && sameNicheMarket(b, niche, country));
   const mine = data.brands.filter((b) => !b.isSuggestion);
 
   return (
@@ -2816,7 +2833,7 @@ function BrandsTab({ data, userId, accessToken, invalidate, goDeals, onDealAdded
         {msg && <p className="mt-2 text-sm text-[var(--dim)]" role="status">{msg}</p>}
       </section>
 
-      {suggestions.length > 0 && (
+      {suggestions.length > 0 ? (
         <section aria-label="Brand suggestions">
           <SectionTitle>Suggestions to review</SectionTitle>
           <p className="mt-1 text-sm text-[var(--dim)]">Brands are ranked by the strength of their paid sponsorship evidence. A listing is not a promise the brand will accept your proposal.</p>
@@ -2887,6 +2904,11 @@ function BrandsTab({ data, userId, accessToken, invalidate, goDeals, onDealAdded
               );
             })}
           </ul>
+        </section>
+      ) : (
+        <section aria-label="Brand suggestions">
+          <SectionTitle>Suggestions to review</SectionTitle>
+          <p className="mt-1 text-sm text-[var(--dim)]">No brands saved for {niche} + {country} yet. Tap "Search for brands" above to discover some.</p>
         </section>
       )}
 

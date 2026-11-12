@@ -52,7 +52,7 @@ export async function discoverBrands(
   if ((cachedData ?? []).length > 0) {
     return {
       found: 0,
-      message: `Showing your recent ${niche} results for ${country} — search again tomorrow for fresh ones.`,
+      message: `You already searched ${niche} + ${country} today. These are those results — each niche gets one fresh search a day. Try a different niche for new brands.`,
     };
   }
 
